@@ -54,7 +54,7 @@ A web app at `gist.party` that provides real-time collaborative markdown editing
 ┌─────────────────┐      WebSocket       ┌───────────────────────┐
 │   Browser        │◄──────────────────► │  GistRoom DO          │
 │                  │  (y-partyserver)    │  (extends YServer)    │
-│  CodeMirror      │                     │                       │
+│  Milkdown        │                     │                       │
 │  + Yjs doc       │                     │  Yjs CRDT sync/aware  │
 │  + YProvider     │                     │  + DO SQLite storage  │
 │  + Awareness     │                     │  + onLoad / onSave    │
@@ -102,19 +102,24 @@ The Worker handles all HTTP traffic. WebSocket upgrades are routed to the GistRo
 
 ### Client
 
-- **Editor**: CodeMirror 6 with `y-codemirror.next` binding for Yjs integration
+- **Editor**: Milkdown (`@milkdown/core` + `@milkdown/react`) — a markdown-native WYSIWYG editor built on ProseMirror and remark. Users see rendered content (headings, bold, lists) while editing, but the internal model is a markdown AST, preserving near-lossless round-trip fidelity with the Gist's markdown source.
+- **Presets**: `@milkdown/preset-commonmark` for core markdown, `@milkdown/preset-gfm` for GitHub Flavored Markdown (tables, strikethrough, task lists)
+- **Collaboration**: `@milkdown/plugin-collab` wraps y-prosemirror (ySyncPlugin, yCursorPlugin, yUndoPlugin). The `CollabService` binds to the Yjs `Y.Doc` and connects/disconnects as needed.
 - **Provider**: `YProvider` from `y-partyserver/provider` connecting to the GistRoom DO. Configured with `party: "gist-room"` and `room: gistId`.
 - **Awareness**: Shows collaborator cursors, selections, and names (pulled from GitHub profile via JWT)
+- **Markdown serialization**: `getMarkdown()` from `@milkdown/utils` extracts the current document as a markdown string for saving to the Gist. On load, markdown is passed as `defaultValue` and parsed through the remark pipeline into ProseMirror nodes.
 - **Custom messages**: Uses `provider.sendMessage()` and `provider.on("custom-message", ...)` for non-Yjs communication (sync status, staleness warnings)
-- **Markdown preview**: Optional split-pane rendered preview using `markdown-it` or similar
+- **Plugins**: `plugin-listener` for observing document changes (debounced save trigger), `plugin-slash` for slash commands, `plugin-block` for block-level drag-and-drop
 
 ## Tech Stack
 
 | Component         | Technology                                     |
 | ----------------- | ---------------------------------------------- |
 | Framework         | Vite + React                                   |
-| Editor            | CodeMirror 6                                   |
-| CRDT              | Yjs + y-codemirror.next                        |
+| Editor            | Milkdown (`@milkdown/core`, `@milkdown/react`) |
+| Editor presets    | `@milkdown/preset-commonmark`, `@milkdown/preset-gfm` |
+| Editor collab     | `@milkdown/plugin-collab` (wraps y-prosemirror)|
+| CRDT              | Yjs (via y-prosemirror, managed by Milkdown)   |
 | Realtime server   | PartyServer (`partyserver`) on Cloudflare DOs  |
 | Yjs integration   | `y-partyserver` (YServer + YProvider)          |
 | HTTP router       | Hono                                           |
@@ -146,8 +151,8 @@ These are handled by the Cloudflare Worker (Hono router). WebSocket routing is h
 
 ## Data Flow: Edit → Save
 
-1. User types in CodeMirror
-2. `y-codemirror.next` applies the edit to the local Yjs document
+1. User types in Milkdown (WYSIWYG markdown editor)
+2. ProseMirror transaction is captured by `ySyncPlugin` (via `@milkdown/plugin-collab`) and applied to the local Yjs document
 3. `YProvider` syncs the update to the GistRoom DO via WebSocket
 4. `YServer` broadcasts the update to all other connected clients automatically
 5. `YServer` calls `onSave()` after the debounce period (configured via `callbackOptions`)
@@ -162,7 +167,7 @@ These are handled by the Cloudflare Worker (Hono router). WebSocket routing is h
 1. Client creates a `YProvider` with `party: "gist-room"` and `room: gistId`; `routePartykitRequest` routes the WebSocket to the GistRoom DO
 2. `YServer` calls `onLoad()` — if DO SQLite has a snapshot, apply it to `this.document`
 3. If no snapshot → `onLoad()` fetches from GitHub Gist API, applies content to `this.document`
-4. `YServer` runs the Yjs sync handshake with the client automatically; client receives the Yjs state and renders in CodeMirror
+4. `YServer` runs the Yjs sync handshake with the client automatically; client receives the Yjs state and Milkdown renders it as styled WYSIWYG content via the remark pipeline
 
 ## Auth Model
 
@@ -245,7 +250,6 @@ Edit access is controlled via **capability-based edit tokens**, not by authentic
 - Multiple files per Gist
 - Offline support / service worker
 - Comments / annotations
-- Markdown preview pane in editor
 - Gist history / version browsing
 - Custom domains for individual docs
 - Granular per-document permission controls (beyond edit link)
