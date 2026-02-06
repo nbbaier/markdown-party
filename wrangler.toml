@@ -14,7 +14,7 @@ bindings = [
 
 [[migrations]]
 tag = "v1"
-new_classes = ["GistRoom"]
+new_sqlite_classes = ["GistRoom"]
 
 [[kv_namespaces]]
 binding = "SESSION_KV"

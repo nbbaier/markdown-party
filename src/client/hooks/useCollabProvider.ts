@@ -109,7 +109,7 @@ export function useCollabProvider({
 			setAwareness(null);
 			setConnectionState("disconnected");
 		};
-	}, [gistId]);
+	}, [gistId, user]);
 
 	useEffect(() => {
 		const handleVisibilityChange = () => {

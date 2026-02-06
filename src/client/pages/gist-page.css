@@ -63,21 +63,21 @@
 }
 
 .view-badge {
-  display: inline-block;
-  padding: 0.25rem 0.75rem;
-  font-size: 12px;
-  font-weight: 500;
-  color: #586069;
-  background-color: #f1f8ff;
-  border: 1px solid #c8e1ff;
-  border-radius: 12px;
+	display: inline-block;
+	padding: 0.25rem 0.75rem;
+	font-size: 12px;
+	font-weight: 500;
+	color: #586069;
+	background-color: #f1f8ff;
+	border: 1px solid #c8e1ff;
+	border-radius: 12px;
 }
 
 .viewer-wrapper {
-  border: 1px solid #e1e4e8;
-  border-radius: 6px;
-  background-color: #fff;
-  margin-bottom: 2rem;
+	border: 1px solid #e1e4e8;
+	border-radius: 6px;
+	background-color: #fff;
+	margin-bottom: 2rem;
 }
 
 .export-content {

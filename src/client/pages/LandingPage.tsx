@@ -5,18 +5,54 @@ import "./landing-page.css";
 export function LandingPage() {
 	const navigate = useNavigate();
 	const [gistUrl, setGistUrl] = useState("");
+	const [importing, setImporting] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
 	const handleNewDocument = () => {
-		// Generate a random gist ID for now
 		const randomId = Math.random().toString(36).substring(2, 15);
 		navigate(`/${randomId}`);
 	};
 
-	const handleImportGist = () => {
-		// Extract gist ID from URL or use as-is
+	const handleImportGist = async () => {
 		const gistId = gistUrl.split("/").pop() || gistUrl;
-		if (gistId) {
-			navigate(`/${gistId}`);
+		if (!gistId) return;
+
+		setImporting(true);
+		setError(null);
+
+		try {
+			const res = await fetch(`/api/gists/${gistId}/import`, {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ url: gistUrl }),
+				credentials: "include",
+			});
+
+			if (res.status === 401) {
+				setError("Please sign in to import a gist");
+				return;
+			}
+
+			if (!res.ok) {
+				const data = await res.json().catch(() => ({}));
+				setError(data.error || "Failed to import gist");
+				return;
+			}
+
+			const data = (await res.json()) as {
+				gist_id: string;
+				edit_token?: string;
+			};
+
+			if (data.edit_token) {
+				navigate(`/${data.gist_id}#edit=${data.edit_token}`);
+			} else {
+				navigate(`/${data.gist_id}`);
+			}
+		} catch {
+			setError("Failed to import gist");
+		} finally {
+			setImporting(false);
 		}
 	};
 
@@ -46,15 +82,17 @@ export function LandingPage() {
 						onChange={(e) => setGistUrl(e.target.value)}
 						className="import-input"
 						onKeyDown={(e) => e.key === "Enter" && handleImportGist()}
+						disabled={importing}
 					/>
 					<button
 						type="button"
 						className="btn btn-secondary"
 						onClick={handleImportGist}
-						disabled={!gistUrl.trim()}
+						disabled={!gistUrl.trim() || importing}
 					>
-						Import Gist
+						{importing ? "Importing..." : "Import Gist"}
 					</button>
+					{error && <p className="import-error">{error}</p>}
 				</div>
 			</div>
 

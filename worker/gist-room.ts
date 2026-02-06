@@ -1,13 +1,12 @@
 import type { Connection, ConnectionContext } from "partyserver";
 import { YServer } from "y-partyserver";
 import * as Y from "yjs";
-import { decrypt } from "../src/shared/encryption";
 import { verifyEditCookie } from "../src/shared/edit-cookie";
+import { decrypt } from "../src/shared/encryption";
 import { verifyJwt } from "./shared/jwt";
 import {
 	type CanonicalMarkdownPayload,
 	type CustomMessage,
-	type SyncState,
 	decodeMessage,
 	encodeMessage,
 	MessageTypeCanonicalMarkdown,
@@ -19,6 +18,7 @@ import {
 	MessageTypeRemoteChanged,
 	MessageTypeRequestMarkdown,
 	MessageTypeSyncStatus,
+	type SyncState,
 } from "./shared/messages";
 
 interface PendingMarkdownRequest {
@@ -37,6 +37,7 @@ interface WorkerEnv {
 
 const STALE_THRESHOLD_MS = 5 * 60 * 1000;
 const MAX_RETRY_BACKOFF_MS = 300_000;
+const PENDING_SYNC_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export class GistRoom extends YServer<WorkerEnv> {
 	static options = {
@@ -74,6 +75,7 @@ export class GistRoom extends YServer<WorkerEnv> {
 
 	async onStart(): Promise<void> {
 		console.log(`[GistRoom ${this.name}] Server started`);
+		this.ensureSchema();
 	}
 
 	async onLoad(): Promise<void> {
@@ -92,6 +94,10 @@ export class GistRoom extends YServer<WorkerEnv> {
 
 		this.ensureSchema();
 
+		if (await this.checkAndHandlePendingSyncExpiry()) {
+			return;
+		}
+
 		const snapshot = this.loadSnapshot();
 		if (snapshot) {
 			console.log(`[GistRoom ${this.name}] Restored from snapshot`);
@@ -107,6 +113,13 @@ export class GistRoom extends YServer<WorkerEnv> {
 			);
 			this.needsInit = true;
 		}
+	}
+
+	async alarm(): Promise<void> {
+		console.log(
+			`[GistRoom ${this.name}] Alarm fired - checking pending sync expiry`,
+		);
+		await this.checkAndHandlePendingSyncExpiry();
 	}
 
 	async onSave(): Promise<void> {
@@ -177,12 +190,12 @@ export class GistRoom extends YServer<WorkerEnv> {
 		await this.checkStaleness();
 	}
 
-	onClose(
+	async onClose(
 		connection: Connection,
 		code: number,
 		reason: string,
 		_wasClean: boolean,
-	): void {
+	): Promise<void> {
 		console.log(
 			`[GistRoom ${this.name}] Connection ${connection.id} left (code: ${code}, reason: ${reason})`,
 		);
@@ -191,12 +204,15 @@ export class GistRoom extends YServer<WorkerEnv> {
 		this.connectionCapabilities.delete(connection.id);
 
 		if (this.ownerToken && this.isOwnerConnection(connection)) {
-			const hasOtherOwnerConnection = this.findOwnerConnection(connection.id) !== null;
+			const hasOtherOwnerConnection =
+				this.findOwnerConnection(connection.id) !== null;
 			if (!hasOtherOwnerConnection) {
 				this.ownerToken = null;
 				const pendingSync = this.getMeta("pendingSync");
 				if (pendingSync === "true") {
-					this.setMeta("pendingSince", new Date().toISOString());
+					const pendingSince = new Date().toISOString();
+					this.setMeta("pendingSince", pendingSince);
+					await this.schedulePendingSyncExpiryAlarm();
 				}
 				console.log(
 					`[GistRoom ${this.name}] Owner disconnected, cleared token`,
@@ -285,6 +301,7 @@ export class GistRoom extends YServer<WorkerEnv> {
 
 	async onRequest(request: Request): Promise<Response> {
 		const url = new URL(request.url);
+		console.log(`[GistRoom ${this.name}] onRequest: ${request.method} ${url.pathname}`);
 
 		if (url.pathname.endsWith("/initialize") && request.method === "POST") {
 			try {
@@ -339,10 +356,10 @@ export class GistRoom extends YServer<WorkerEnv> {
 					headers: { "Content-Type": "application/json" },
 				});
 			} catch {
-				return new Response(
-					JSON.stringify({ valid: false }),
-					{ status: 400, headers: { "Content-Type": "application/json" } },
-				);
+				return new Response(JSON.stringify({ valid: false }), {
+					status: 400,
+					headers: { "Content-Type": "application/json" },
+				});
 			}
 		}
 
@@ -400,16 +417,13 @@ export class GistRoom extends YServer<WorkerEnv> {
 		}
 
 		try {
-			const response = await fetch(
-				`https://api.github.com/gists/${gistId}`,
-				{
-					method: "PATCH",
-					headers,
-					body: JSON.stringify({
-						files: { [filename]: { content: markdown } },
-					}),
-				},
-			);
+			const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+				method: "PATCH",
+				headers,
+				body: JSON.stringify({
+					files: { [filename]: { content: markdown } },
+				}),
+			});
 
 			if (response.ok) {
 				const etag = response.headers.get("ETag");
@@ -418,21 +432,18 @@ export class GistRoom extends YServer<WorkerEnv> {
 				}
 				this.setMeta("updatedAt", new Date().toISOString());
 				this.setMeta("pendingSync", "false");
+				this.setMeta("pendingSince", "");
+				await this.cancelPendingSyncExpiryAlarm();
 				this.retryAttempt = 0;
 				this.broadcastSyncStatus("saved");
-				console.log(
-					`[GistRoom ${this.name}] Synced to GitHub successfully`,
-				);
+				console.log(`[GistRoom ${this.name}] Synced to GitHub successfully`);
 			} else if (response.status === 412) {
 				await this.handle412Conflict();
 			} else {
 				await this.handleSyncError(response.status);
 			}
 		} catch (error) {
-			console.error(
-				`[GistRoom ${this.name}] GitHub sync fetch error:`,
-				error,
-			);
+			console.error(`[GistRoom ${this.name}] GitHub sync fetch error:`, error);
 			await this.handleSyncError(0);
 		}
 	}
@@ -464,7 +475,7 @@ export class GistRoom extends YServer<WorkerEnv> {
 		this.retryAttempt++;
 
 		const backoff = Math.min(
-			1000 * Math.pow(2, this.retryAttempt),
+			1000 * 2 ** this.retryAttempt,
 			MAX_RETRY_BACKOFF_MS,
 		);
 
@@ -510,16 +521,13 @@ export class GistRoom extends YServer<WorkerEnv> {
 		if (!gistId || !this.ownerToken) return null;
 
 		try {
-			const response = await fetch(
-				`https://api.github.com/gists/${gistId}`,
-				{
-					headers: {
-						Authorization: `Bearer ${this.ownerToken}`,
-						Accept: "application/vnd.github.v3+json",
-						"User-Agent": "gist-party",
-					},
+			const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+				headers: {
+					Authorization: `Bearer ${this.ownerToken}`,
+					Accept: "application/vnd.github.v3+json",
+					"User-Agent": "gist-party",
 				},
-			);
+			});
 
 			if (!response.ok) {
 				console.error(
@@ -535,19 +543,34 @@ export class GistRoom extends YServer<WorkerEnv> {
 
 			return (await response.json()) as GitHubGistResponse;
 		} catch (error) {
-			console.error(
-				`[GistRoom ${this.name}] Fetch remote gist error:`,
-				error,
-			);
+			console.error(`[GistRoom ${this.name}] Fetch remote gist error:`, error);
 			return null;
 		}
 	}
 
 	private broadcastSyncStatus(state: SyncState, detail?: string): void {
 		this.syncState = state;
+
+		const pendingSync = this.getMeta("pendingSync");
+		const pendingSince = this.getMeta("pendingSince");
+
+		let expiresAt: string | undefined;
+		if (pendingSync === "true" && pendingSince) {
+			const pendingSinceTime = new Date(pendingSince).getTime();
+			expiresAt = new Date(
+				pendingSinceTime + PENDING_SYNC_TTL_MS,
+			).toISOString();
+		}
+
 		const message: CustomMessage = {
 			type: MessageTypeSyncStatus,
-			payload: { state, detail },
+			payload: {
+				state,
+				detail,
+				pendingSince:
+					pendingSync === "true" ? (pendingSince ?? undefined) : undefined,
+				expiresAt,
+			},
 		};
 		this.broadcastCustomMessage(encodeMessage(message));
 	}
@@ -590,6 +613,8 @@ export class GistRoom extends YServer<WorkerEnv> {
 			console.log(
 				`[GistRoom ${this.name}] Owner token loaded for ${ownerUserId}`,
 			);
+
+			await this.attemptPendingSyncOnReconnect();
 		} catch (error) {
 			console.error(
 				`[GistRoom ${this.name}] Failed to load owner token:`,
@@ -598,19 +623,92 @@ export class GistRoom extends YServer<WorkerEnv> {
 		}
 	}
 
+	private async attemptPendingSyncOnReconnect(): Promise<void> {
+		const pendingSync = this.getMeta("pendingSync");
+		if (pendingSync !== "true") return;
+
+		console.log(
+			`[GistRoom ${this.name}] Owner reconnected with pending sync, attempting immediate sync`,
+		);
+
+		await this.cancelPendingSyncExpiryAlarm();
+
+		const markdown = this.loadCanonicalMarkdown();
+		if (!markdown) {
+			console.log(
+				`[GistRoom ${this.name}] No canonical markdown available for pending sync`,
+			);
+			return;
+		}
+
+		await this.syncToGitHub(markdown);
+	}
+
 	private isOwnerConnection(connection: Connection): boolean {
 		const cap = this.connectionCapabilities.get(connection.id);
 		return cap?.isOwner === true;
 	}
 
-	private findOwnerConnection(
-		excludeId?: string,
-	): Connection | null {
+	private findOwnerConnection(excludeId?: string): Connection | null {
 		for (const conn of this.getConnections()) {
 			if (excludeId && conn.id === excludeId) continue;
 			if (this.isOwnerConnection(conn)) return conn;
 		}
 		return null;
+	}
+
+	// ============================================================================
+	// Pending Sync Expiry
+	// ============================================================================
+
+	private async checkAndHandlePendingSyncExpiry(): Promise<boolean> {
+		const pendingSync = this.getMeta("pendingSync");
+		if (pendingSync !== "true") {
+			return false;
+		}
+
+		const pendingSince = this.getMeta("pendingSince");
+		if (!pendingSince) {
+			return false;
+		}
+
+		const pendingSinceTime = new Date(pendingSince).getTime();
+		const expiresAt = pendingSinceTime + PENDING_SYNC_TTL_MS;
+		const now = Date.now();
+
+		if (now >= expiresAt) {
+			console.log(
+				`[GistRoom ${this.name}] Pending sync expired (since ${pendingSince}), clearing snapshot`,
+			);
+
+			this.ctx.storage.sql.exec(`DELETE FROM yjs_snapshot WHERE id = 1`);
+			this.ctx.storage.sql.exec(`DELETE FROM canonical_markdown WHERE id = 1`);
+			this.setMeta("pendingSync", "false");
+			this.setMeta("pendingSince", "");
+
+			this.needsInit = true;
+			return true;
+		}
+
+		return false;
+	}
+
+	private async schedulePendingSyncExpiryAlarm(): Promise<void> {
+		const pendingSince = this.getMeta("pendingSince");
+		if (!pendingSince) return;
+
+		const pendingSinceTime = new Date(pendingSince).getTime();
+		const expiresAt = pendingSinceTime + PENDING_SYNC_TTL_MS;
+
+		await this.ctx.storage.setAlarm(expiresAt);
+		console.log(
+			`[GistRoom ${this.name}] Scheduled expiry alarm for ${new Date(expiresAt).toISOString()}`,
+		);
+	}
+
+	private async cancelPendingSyncExpiryAlarm(): Promise<void> {
+		await this.ctx.storage.deleteAlarm();
+		console.log(`[GistRoom ${this.name}] Cancelled pending sync expiry alarm`);
 	}
 
 	// ============================================================================
@@ -623,8 +721,7 @@ export class GistRoom extends YServer<WorkerEnv> {
 		const initialized = this.getMeta("initialized");
 		if (initialized !== "true") return;
 
-		const snapshotAge =
-			Date.now() - new Date(this.snapshotUpdatedAt).getTime();
+		const snapshotAge = Date.now() - new Date(this.snapshotUpdatedAt).getTime();
 		if (snapshotAge <= STALE_THRESHOLD_MS) return;
 
 		const pendingSync = this.getMeta("pendingSync");
@@ -642,17 +739,14 @@ export class GistRoom extends YServer<WorkerEnv> {
 		if (!gistId || !storedEtag) return;
 
 		try {
-			const response = await fetch(
-				`https://api.github.com/gists/${gistId}`,
-				{
-					headers: {
-						Authorization: `Bearer ${this.ownerToken}`,
-						Accept: "application/vnd.github.v3+json",
-						"User-Agent": "gist-party",
-						"If-None-Match": storedEtag,
-					},
+			const response = await fetch(`https://api.github.com/gists/${gistId}`, {
+				headers: {
+					Authorization: `Bearer ${this.ownerToken}`,
+					Accept: "application/vnd.github.v3+json",
+					"User-Agent": "gist-party",
+					"If-None-Match": storedEtag,
 				},
-			);
+			});
 
 			if (response.status === 304) {
 				console.log(
@@ -685,10 +779,7 @@ export class GistRoom extends YServer<WorkerEnv> {
 				);
 			}
 		} catch (error) {
-			console.error(
-				`[GistRoom ${this.name}] Staleness check error:`,
-				error,
-			);
+			console.error(`[GistRoom ${this.name}] Staleness check error:`, error);
 		}
 	}
 
@@ -715,9 +806,8 @@ export class GistRoom extends YServer<WorkerEnv> {
 			return;
 		}
 
-		const markdown = await this.requestCanonicalMarkdownFromConnection(
-			ownerConnection,
-		);
+		const markdown =
+			await this.requestCanonicalMarkdownFromConnection(ownerConnection);
 		if (markdown && this.ownerToken) {
 			await this.syncToGitHub(markdown, { force: true });
 		}
@@ -749,6 +839,8 @@ export class GistRoom extends YServer<WorkerEnv> {
 		};
 		this.broadcastCustomMessage(encodeMessage(message));
 		this.setMeta("pendingSync", "false");
+		this.setMeta("pendingSince", "");
+		await this.cancelPendingSyncExpiryAlarm();
 		this.broadcastSyncStatus("saved");
 	}
 
@@ -874,6 +966,7 @@ export class GistRoom extends YServer<WorkerEnv> {
 		ownerUserId: string,
 		editTokenHash: string,
 	): Promise<void> {
+		console.log(`[GistRoom ${this.name}] initializeRoom called with: gistId=${gistId}, filename=${filename}, owner=${ownerUserId}`);
 		this.setMeta("initialized", "true");
 		this.setMeta("gistId", gistId);
 		this.setMeta("filename", filename);
@@ -881,6 +974,7 @@ export class GistRoom extends YServer<WorkerEnv> {
 		this.setMeta("editTokenHash", editTokenHash);
 		this.setMeta("pendingSync", "false");
 		console.log(`[GistRoom ${this.name}] Room initialized for gist ${gistId}`);
+		console.log(`[GistRoom ${this.name}] Meta after init: initialized=${this.getMeta("initialized")}, gistId=${this.getMeta("gistId")}`);
 	}
 
 	// ============================================================================

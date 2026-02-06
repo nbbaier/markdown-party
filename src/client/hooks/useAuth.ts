@@ -55,7 +55,7 @@ export function useAuth(): AuthState & {
 			} else {
 				setState({ user: null, loading: false, error: "Failed to fetch user" });
 			}
-		} catch (err) {
+		} catch (_err) {
 			setState({ user: null, loading: false, error: "Network error" });
 		}
 	}, []);

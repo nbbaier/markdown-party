@@ -54,6 +54,8 @@ export type SyncState =
 export interface SyncStatusPayload {
 	state: SyncState;
 	detail?: string;
+	pendingSince?: string;
+	expiresAt?: string;
 }
 
 export interface ErrorRetryingPayload {

@@ -18,6 +18,20 @@ interface GistMeta {
 	lastCanonicalMarkdown: string | null;
 }
 
+function createDoRequest(
+	gistId: string,
+	path: string,
+	options?: RequestInit,
+): Request {
+	return new Request(`https://do${path}`, {
+		...options,
+		headers: {
+			...options?.headers,
+			"x-partykit-room": gistId,
+		},
+	});
+}
+
 type Env = {
 	Bindings: {
 		GIST_ROOM: DurableObjectNamespace;
@@ -94,6 +108,7 @@ gistRoutes.post("/", authMiddleware, async (c) => {
 			Authorization: `Bearer ${token}`,
 			Accept: "application/vnd.github.v3+json",
 			"Content-Type": "application/json",
+			"User-Agent": "gist-party",
 		},
 		body: JSON.stringify({
 			description,
@@ -113,7 +128,7 @@ gistRoutes.post("/", authMiddleware, async (c) => {
 
 	const stub = c.env.GIST_ROOM.get(c.env.GIST_ROOM.idFromName(gistId));
 	await stub.fetch(
-		new Request("https://do/initialize", {
+		createDoRequest(gistId, "/initialize", {
 			method: "POST",
 			body: JSON.stringify({
 				gistId,
@@ -128,74 +143,87 @@ gistRoutes.post("/", authMiddleware, async (c) => {
 	return c.json({ gist_id: gistId, edit_token: editToken }, 201);
 });
 
-gistRoutes.post("/:gist_id/import", authMiddleware, async (c) => {
-	const userId = c.get("userId");
-	const body = await c.req.json<{ url: string }>();
+	gistRoutes.post("/:gist_id/import", authMiddleware, async (c) => {
+		const userId = c.get("userId");
+		const body = await c.req.json<{ url: string }>();
 
-	const gistIdMatch = body.url.match(
-		/(?:https?:\/\/gist\.github\.com\/[^/]+\/)?([a-f0-9]+)/,
-	);
-	const sourceGistId = gistIdMatch ? gistIdMatch[1] : body.url;
+		console.log(`Import request from user ${userId} for URL: ${body.url}`);
 
-	const token = await getDecryptedToken(
-		c.env.SESSION_KV,
-		userId,
-		c.env.ENCRYPTION_KEY_V1,
-	);
+		const gistIdMatch = body.url.match(
+			/(?:https?:\/\/gist\.github\.com\/[^/]+\/)?([a-f0-9]+)/,
+		);
+		const sourceGistId = gistIdMatch ? gistIdMatch[1] : body.url;
 
-	const ghResponse = await fetch(
-		`https://api.github.com/gists/${sourceGistId}`,
-		{
-			headers: {
-				Authorization: `Bearer ${token}`,
-				Accept: "application/vnd.github.v3+json",
+		const token = await getDecryptedToken(
+			c.env.SESSION_KV,
+			userId,
+			c.env.ENCRYPTION_KEY_V1,
+		);
+
+		const ghResponse = await fetch(
+			`https://api.github.com/gists/${sourceGistId}`,
+			{
+				headers: {
+					Authorization: `Bearer ${token}`,
+					Accept: "application/vnd.github.v3+json",
+					"User-Agent": "gist-party",
+				},
 			},
-		},
-	);
+		);
 
-	if (!ghResponse.ok) {
-		return c.json({ error: "Failed to fetch gist" }, 502);
-	}
+		if (!ghResponse.ok) {
+			const errorBody = await ghResponse.text();
+			console.error(`GitHub API error ${ghResponse.status}:`, errorBody);
+			return c.json({ error: `Failed to fetch gist (${ghResponse.status})` }, 502);
+		}
 
-	const gistData = (await ghResponse.json()) as {
-		id: string;
-		files: Record<string, { filename: string; content: string }>;
-	};
+		const gistData = (await ghResponse.json()) as {
+			id: string;
+			files: Record<string, { filename: string; content: string }>;
+		};
 
-	const fileEntries = Object.values(gistData.files);
-	if (fileEntries.length !== 1) {
-		return c.json({ error: "Only single-file gists can be imported" }, 400);
-	}
+		console.log(`Fetched gist from GitHub: ${gistData.id}`);
 
-	const file = fileEntries[0];
-	const filename = file.filename;
-	const gistId = gistData.id;
+		const fileEntries = Object.values(gistData.files);
+		if (fileEntries.length !== 1) {
+			return c.json({ error: "Only single-file gists can be imported" }, 400);
+		}
 
-	const { token: editToken, hash: editTokenHash } = await generateEditToken();
+		const file = fileEntries[0];
+		const filename = file.filename;
+		const gistId = gistData.id;
 
-	const stub = c.env.GIST_ROOM.get(c.env.GIST_ROOM.idFromName(gistId));
-	await stub.fetch(
-		new Request("https://do/initialize", {
-			method: "POST",
-			body: JSON.stringify({
-				gistId,
-				filename,
-				ownerUserId: userId,
-				editTokenHash,
+		console.log(`Initializing DO for gist ${gistId} with filename ${filename}`);
+
+		const { token: editToken, hash: editTokenHash } = await generateEditToken();
+
+		const stub = c.env.GIST_ROOM.get(c.env.GIST_ROOM.idFromName(gistId));
+		const initResponse = await stub.fetch(
+			createDoRequest(gistId, "/initialize", {
+				method: "POST",
+				body: JSON.stringify({
+					gistId,
+					filename,
+					ownerUserId: userId,
+					editTokenHash,
+				}),
+				headers: { "Content-Type": "application/json" },
 			}),
-			headers: { "Content-Type": "application/json" },
-		}),
-	);
+		);
+		console.log(`DO initialize response status: ${initResponse.status}, body: ${await initResponse.text()}`);
 
-	return c.json({ gist_id: gistId, edit_token: editToken }, 201);
-});
+		return c.json({ gist_id: gistId, edit_token: editToken }, 201);
+	});
 
-gistRoutes.get("/:gist_id", async (c) => {
-	const gistId = c.req.param("gist_id");
-	const stub = c.env.GIST_ROOM.get(c.env.GIST_ROOM.idFromName(gistId));
+	gistRoutes.get("/:gist_id", async (c) => {
+		const gistId = c.req.param("gist_id");
+		console.log(`Fetching meta for gist: ${gistId}`);
+		const stub = c.env.GIST_ROOM.get(c.env.GIST_ROOM.idFromName(gistId));
 
-	const metaResponse = await stub.fetch(new Request("https://do/meta"));
-	const meta = (await metaResponse.json()) as GistMeta;
+		const metaResponse = await stub.fetch(createDoRequest(gistId, "/meta"));
+		const metaText = await metaResponse.text();
+		console.log(`Meta response status: ${metaResponse.status}, body: ${metaText}`);
+		const meta = JSON.parse(metaText) as GistMeta;
 
 	if (!meta.initialized) {
 		return c.json({ error: "Not found" }, 404);
@@ -214,7 +242,7 @@ gistRoutes.get("/:gist_id/raw", async (c) => {
 	const gistId = c.req.param("gist_id");
 	const stub = c.env.GIST_ROOM.get(c.env.GIST_ROOM.idFromName(gistId));
 
-	const metaResponse = await stub.fetch(new Request("https://do/meta"));
+	const metaResponse = await stub.fetch(createDoRequest(gistId, "/meta"));
 	const meta = (await metaResponse.json()) as GistMeta;
 
 	if (!meta.initialized) {
@@ -245,7 +273,7 @@ gistRoutes.get("/:gist_id/can-edit", async (c) => {
 				issuer: "gist.party",
 			});
 			const stub = c.env.GIST_ROOM.get(c.env.GIST_ROOM.idFromName(gistId));
-			const metaRes = await stub.fetch(new Request("https://do/meta"));
+			const metaRes = await stub.fetch(createDoRequest(gistId, "/meta"));
 			const meta = (await metaRes.json()) as GistMeta;
 			isOwner = meta.ownerUserId === claims.userId;
 		} catch {
@@ -285,7 +313,7 @@ gistRoutes.post("/:gist_id/claim", authMiddleware, async (c) => {
 
 	const stub = c.env.GIST_ROOM.get(c.env.GIST_ROOM.idFromName(gistId));
 	const verifyRes = await stub.fetch(
-		new Request("https://do/verify-token", {
+		createDoRequest(gistId, "/verify-token", {
 			method: "POST",
 			body: JSON.stringify({ tokenHash }),
 			headers: { "Content-Type": "application/json" },
@@ -323,7 +351,7 @@ gistRoutes.post("/:gist_id/edit-token", authMiddleware, async (c) => {
 	const userId = c.get("userId");
 
 	const stub = c.env.GIST_ROOM.get(c.env.GIST_ROOM.idFromName(gistId));
-	const metaRes = await stub.fetch(new Request("https://do/meta"));
+	const metaRes = await stub.fetch(createDoRequest(gistId, "/meta"));
 	const meta = (await metaRes.json()) as GistMeta;
 
 	if (!meta.initialized) {
@@ -336,7 +364,7 @@ gistRoutes.post("/:gist_id/edit-token", authMiddleware, async (c) => {
 	const { token: newToken, hash: newHash } = await generateEditToken();
 
 	await stub.fetch(
-		new Request("https://do/update-token", {
+		createDoRequest(gistId, "/update-token", {
 			method: "POST",
 			body: JSON.stringify({ editTokenHash: newHash }),
 			headers: { "Content-Type": "application/json" },
