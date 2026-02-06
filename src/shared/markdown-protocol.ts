@@ -29,4 +29,4 @@
  */
 
 /** Timeout for waiting on a `canonical-markdown` response. */
-const _MARKDOWN_REQUEST_TIMEOUT_MS = 5000;
+export const MARKDOWN_REQUEST_TIMEOUT_MS = 5000;

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { fetchWithCsrf } from "../lib/fetch-with-csrf";
 
 const EDIT_HASH_REGEX = /^#edit=.+$/;
 const EDIT_TOKEN_REGEX = /^#edit=(.+)$/;
@@ -32,7 +33,7 @@ export function useEditToken(gistId: string | undefined): UseEditTokenResult {
     claimedRef.current = true;
     const token = match[1];
 
-    fetch(`/api/gists/${gistId}/claim`, {
+    fetchWithCsrf(`/api/gists/${gistId}/claim`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),

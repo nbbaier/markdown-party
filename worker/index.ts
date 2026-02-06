@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { routePartykitRequest } from "partyserver";
 import authRoutes from "./routes/auth";
 import gistRoutes from "./routes/gists";
+import { csrfMiddleware } from "./shared/csrf";
 
 interface Env {
   Bindings: {
@@ -16,9 +17,36 @@ interface Env {
 
 const app = new Hono<Env>();
 
+// Security headers middleware
+app.use("*", async (c, next) => {
+  await next();
+  c.header("Referrer-Policy", "strict-origin");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Frame-Options", "DENY");
+  c.header(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' https://avatars.githubusercontent.com data:",
+      "connect-src 'self' wss://*.gist.party wss://localhost:*",
+      "frame-src 'none'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self' https://github.com",
+    ].join("; ")
+  );
+});
+
 app.get("/api/health", (c) => {
   return c.json({ status: "ok" });
 });
+
+// CSRF protection on state-changing API routes
+app.use("/api/gists/*", csrfMiddleware);
+app.use("/api/auth/logout", csrfMiddleware);
+app.use("/api/auth/refresh", csrfMiddleware);
 
 app.route("/api/auth", authRoutes);
 app.route("/api/gists", gistRoutes);

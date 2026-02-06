@@ -1,8 +1,8 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Layout } from "./client/components/Layout";
-import { AuthProvider } from "./client/contexts/AuthContext";
-import { GistPage } from "./client/pages/GistPage";
-import { LandingPage } from "./client/pages/LandingPage";
+import { AuthProvider } from "./client/contexts/auth-context";
+import { GistPage } from "./client/pages/gist-page";
+import { LandingPage } from "./client/pages/landing-page";
 import "./index.css";
 
 function App() {
