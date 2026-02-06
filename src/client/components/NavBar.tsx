@@ -2,16 +2,8 @@ import { Link } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import "./navbar.css";
 
-export interface NavBarProps {
-  user?: {
-    login: string;
-    avatarUrl: string;
-  } | null;
-}
-
-export function NavBar({ user: userProp }: NavBarProps) {
-  const { logout } = useAuth();
-  const user = userProp;
+export function NavBar() {
+  const { user, logout } = useAuth();
 
   return (
     <nav className="navbar">
