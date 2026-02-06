@@ -1,10 +1,3 @@
-import type {
-	CanonicalMarkdownPayload,
-	NeedsInitPayload,
-	ReloadRemotePayload,
-	RequestMarkdownPayload,
-} from "./messages";
-
 /**
  * The markdown serialization protocol.
  *
@@ -36,11 +29,4 @@ import type {
  */
 
 /** Timeout for waiting on a `canonical-markdown` response. */
-export const MARKDOWN_REQUEST_TIMEOUT_MS = 5000;
-
-export type {
-	RequestMarkdownPayload,
-	CanonicalMarkdownPayload,
-	NeedsInitPayload,
-	ReloadRemotePayload,
-};
+const _MARKDOWN_REQUEST_TIMEOUT_MS = 5000;

@@ -6,18 +6,18 @@ import { LandingPage } from "./client/pages/LandingPage";
 import "./index.css";
 
 function App() {
-	return (
-		<AuthProvider>
-			<BrowserRouter>
-				<Layout>
-					<Routes>
-						<Route path="/" element={<LandingPage />} />
-						<Route path="/:gistId" element={<GistPage />} />
-					</Routes>
-				</Layout>
-			</BrowserRouter>
-		</AuthProvider>
-	);
+  return (
+    <AuthProvider>
+      <BrowserRouter>
+        <Layout>
+          <Routes>
+            <Route element={<LandingPage />} path="/" />
+            <Route element={<GistPage />} path="/:gistId" />
+          </Routes>
+        </Layout>
+      </BrowserRouter>
+    </AuthProvider>
+  );
 }
 
 export default App;

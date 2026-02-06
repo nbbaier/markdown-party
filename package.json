@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "check": "ultracite check",
-    "fix": "ultracite fix"
+    "fix": "ultracite fix",
+    "typecheck": "tsgo --noEmit",
+    "types": "wrangler types"
   },
   "dependencies": {
     "@milkdown/core": "^7.18.0",
@@ -40,6 +42,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
+    "@typescript/native-preview": "^7.0.0-dev.20260206.1",
     "@vitejs/plugin-react": "^5.1.1",
     "globals": "^16.5.0",
     "typescript": "~5.9.3",
