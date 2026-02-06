@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { routePartykitRequest } from "partyserver";
 import authRoutes from "./routes/auth";
+import gistRoutes from "./routes/gists";
 
 type Env = {
   Bindings: {
@@ -9,7 +10,7 @@ type Env = {
     GITHUB_CLIENT_ID: string;
     GITHUB_CLIENT_SECRET: string;
     JWT_SECRET: string;
-    ENCRYPTION_KEY: string;
+    ENCRYPTION_KEY_V1: string;
   };
 };
 
@@ -20,6 +21,7 @@ app.get("/api/health", (c) => {
 });
 
 app.route("/api/auth", authRoutes);
+app.route("/api/gists", gistRoutes);
 
 app.all("/parties/*", async (c) => {
   const response = await routePartykitRequest(c.req.raw, c.env);
