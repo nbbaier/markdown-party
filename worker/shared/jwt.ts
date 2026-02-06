@@ -19,8 +19,7 @@ export interface JwtOptions {
 }
 
 function base64UrlEncode(buffer: ArrayBuffer | Uint8Array): string {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  const base64 = btoa(String.fromCharCode(...bytes));
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
@@ -94,7 +93,7 @@ export async function verifyJwt(
   const valid = await crypto.subtle.verify(
     'HMAC',
     key,
-    signature.buffer as ArrayBuffer,
+    signature,
     new TextEncoder().encode(message)
   );
 

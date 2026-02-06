@@ -15,8 +15,7 @@ export interface EncryptedBlob {
 }
 
 function base64UrlEncode(buffer: ArrayBuffer | Uint8Array): string {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  const base64 = btoa(String.fromCharCode(...bytes));
+  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
@@ -32,7 +31,7 @@ async function importAesKey(base64Key: string): Promise<CryptoKey> {
   const keyData = base64UrlDecode(base64Key);
   return crypto.subtle.importKey(
     'raw',
-    keyData.buffer as ArrayBuffer,
+    keyData,
     { name: 'AES-GCM' },
     false,
     ['encrypt', 'decrypt']
@@ -106,9 +105,9 @@ export async function decrypt(
 
   const key = await importAesKey(keySpec.rawKey);
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: blob.iv.buffer as ArrayBuffer },
+    { name: 'AES-GCM', iv: blob.iv },
     key,
-    blob.ciphertext.buffer as ArrayBuffer
+    blob.ciphertext
   );
 
   return new TextDecoder().decode(plaintext);

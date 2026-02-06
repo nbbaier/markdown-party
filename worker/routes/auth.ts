@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
-import { signJwt, verifyJwt } from "../../shared/jwt";
-import { encrypt } from "../../shared/encryption";
+import { signJwt, verifyJwt } from "../../src/shared/jwt";
+import { encrypt } from "../../src/shared/encryption";
 
 type Env = {
   Bindings: {
@@ -104,7 +104,11 @@ authRoutes.get("/github/callback", async (c) => {
     }
   );
 
-  const tokenData = await tokenResponse.json();
+  const tokenData = (await tokenResponse.json()) as {
+    error?: string;
+    error_description?: string;
+    access_token: string;
+  };
   if (tokenData.error) {
     return c.json({ error: tokenData.error_description }, 400);
   }
@@ -120,7 +124,11 @@ authRoutes.get("/github/callback", async (c) => {
     return c.json({ error: "Failed to fetch user profile" }, 500);
   }
 
-  const userData = await userResponse.json();
+  const userData = (await userResponse.json()) as {
+    id: string | number;
+    login: string;
+    avatar_url: string;
+  };
   const { id: userId, login, avatar_url: avatarUrl } = userData;
 
   const encryptedToken = await encrypt(tokenData.access_token, {

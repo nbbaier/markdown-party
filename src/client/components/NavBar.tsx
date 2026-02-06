@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useAuthContext } from "../contexts/AuthContext";
+import { useAuth } from "../contexts/AuthContext";
 import "./navbar.css";
 
 export interface NavBarProps {
@@ -10,7 +10,7 @@ export interface NavBarProps {
 }
 
 export function NavBar({ user: userProp }: NavBarProps) {
-  const { logout } = useAuthContext();
+  const { logout } = useAuth();
   const user = userProp;
 
   return (

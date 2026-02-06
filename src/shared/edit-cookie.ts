@@ -36,8 +36,9 @@ export function buildEditCookieAttributes(
   };
 }
 
-function base64UrlEncode(buffer: ArrayBuffer): string {
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+function base64UrlEncode(buffer: ArrayBuffer | Uint8Array): string {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  const base64 = btoa(String.fromCharCode(...bytes));
   return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 }
 
@@ -84,7 +85,7 @@ export async function verifyEditCookie(
     const data = base64UrlDecode(dataB64);
     const signature = base64UrlDecode(sigB64);
     const key = await importHmacKey(secret);
-    const valid = await crypto.subtle.verify('HMAC', key, signature, data);
+    const valid = await crypto.subtle.verify('HMAC', key, signature.buffer as ArrayBuffer, data.buffer as ArrayBuffer);
 
     if (!valid) return null;
 
