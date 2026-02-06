@@ -81,19 +81,20 @@ Each Gist ID maps to a PartyServer Durable Object. The `GistRoom` class extends 
 
 The GistRoom:
 
-- **`onLoad()`**: Called once when the DO starts or wakes from hibernation. Loads the Yjs snapshot from DO SQLite storage. If no snapshot exists, fetches the Gist content from the GitHub API (using the owner's encrypted token from KV — reads do not require the owner to be connected) and applies it to `this.document` (the Yjs `Y.Doc` provided by `YServer`).
-- **`onSave()`**: Called by `YServer` after edits (debounced to 30 seconds via `callbackOptions`, with idle-save and flush-on-disconnect). Writes the Yjs snapshot to DO SQLite storage. If the owner is connected, also PATCHes the Gist via the GitHub API (with conditional write). If the owner is not connected, marks the document as "pending sync".
+- **Markdown serialization strategy**: All markdown serialization (Yjs/ProseMirror ↔ markdown) happens **client-side only**. The DO never parses or generates markdown. Instead, the DO requests canonical markdown from a connected authorized client when it needs to write to GitHub or update its stored markdown. This avoids pulling ProseMirror/Milkdown dependencies into the DO runtime and aligns with the existing constraint that GitHub sync requires the owner to be connected.
+- **`onLoad()`**: Called once when the DO starts or wakes from hibernation. Loads the Yjs snapshot from DO SQLite storage and applies it to `this.document`. If no snapshot exists and the room is initialized, the DO sends a `needs-init` custom message to the first connecting authorized client. The client fetches the Gist content (via the API or directly), loads it into the editor as `defaultValue`, and the resulting Yjs updates flow back to the DO naturally. The DO does **not** fetch from GitHub or parse markdown itself.
+- **`onSave()`**: Called by `YServer` after edits (debounced to 30 seconds via `callbackOptions`, with idle-save and flush-on-disconnect). Always writes the Yjs snapshot to DO SQLite storage. If the owner is connected, the DO sends a `request-markdown` custom message to an authorized client, waits for the `canonical-markdown` response, stores the markdown in SQLite, then PATCHes the Gist via the GitHub API (with conditional write using `If-Match: <etag>`). If no authorized client responds within a timeout (e.g., 5 seconds), the DO skips the GitHub PATCH for this cycle. If the owner is not connected, marks the document as "pending sync".
 - **GitHub API errors**: 403/429/5xx responses pause autosync with exponential backoff and emit a custom message so clients show a clear "Error (retrying)" state and allow a manual retry by the owner.
 - **`isReadOnly(connection)`**: Returns `true` for connections without a valid edit capability cookie — `YServer` silently drops incoming Yjs updates from read-only connections. Awareness updates from read-only connections are also rejected to prevent cursor spoofing.
-- **`onCustomMessage(connection, message)`**: Handles non-Yjs messages over the same WebSocket (sync status, staleness warnings). Action messages (merge/overwrite decisions) are restricted to the owner connection only.
+- **`onCustomMessage(connection, message)`**: Handles non-Yjs messages over the same WebSocket. Message types include `canonical-markdown` (client → DO, in response to `request-markdown`), sync status queries, and conflict resolution actions. Action messages (merge/overwrite decisions) are restricted to the owner connection only.
 - **Hibernation**: Enabled via `static options = { hibernate: true }`. The DO is evicted from memory when idle; `onLoad()` rehydrates state from storage on wake.
-- **Staleness detection**: Before each GitHub PATCH in `onSave()`, uses a **conditional write** with `If-Match: <etag>`. If the API returns 412 (Precondition Failed), autosync pauses and a "Remote changed" custom message is sent to connected clients.
-- **Conflict resolution on load**: If the stored snapshot is older than 5 minutes, `onLoad()` validates against GitHub. If `pendingSync` is true, the DO **does not overwrite local Yjs state** — it enters a conflict state and requires an explicit owner decision ("push local to remote" vs "discard local, reload remote"). If `pendingSync` is false and the remote is newer, the external markdown content is applied to the Yjs doc.
+- **Staleness detection**: Uses a **conditional write** with `If-Match: <etag>` on every GitHub PATCH. If the API returns 412 (Precondition Failed), autosync pauses and a `remote-changed` custom message is sent to connected clients. The DO fetches the remote markdown from GitHub and stores it for diff display but does **not** attempt to apply it to the Yjs doc.
+- **Conflict resolution on load**: If the stored snapshot is older than 5 minutes and an authorized client connects, the DO validates its stored etag against GitHub. If `pendingSync` is true, the DO **does not overwrite local Yjs state** — it enters a conflict state and requires an explicit owner decision ("push local to remote" vs "discard local, reload remote"). If `pendingSync` is false and the remote is newer, the DO sends a `reload-remote` custom message with the fresh markdown; the client resets the editor with this content as `defaultValue`, and the resulting Yjs updates replace the DO's state.
 - **Pending sync UX**: If the owner is offline and `pendingSync` persists, clients show a persistent banner and warn on exit that changes are not yet synced to GitHub.
 - **Pending sync durability**: Unsynced state is retained for 30 days. During this window, clients show an expiry date and offer a one-click "Download .md" export. After expiry, the unsynced snapshot is discarded. **Note**: If the owner never reconnects, collaborators with active sessions will see the expiry banner but have no other notification mechanism (e.g., email). This is acceptable for MVP; post-MVP may add notification channels.
-- **Owner token handling**: The owner's GitHub access token is stored **encrypted at rest in Workers KV** (AES-GCM via WebCrypto, keyed by a Workers secret). Encrypted blobs are prefixed with a key version ID (e.g., `v1:<iv>:<ciphertext>`) so that encryption keys can be rotated without invalidating existing tokens — on read, the DO selects the correct decryption key by version, and re-encrypts under the current key version lazily on next write. The DO reads the token from KV when it needs to read from or write to GitHub and caches it in memory while the owner is connected. If the owner disconnects, the in-memory cache is dropped and `pendingSync` is set; saves resume when the owner reconnects and the token is re-read from KV.
-- **Initialized room**: The DO refuses to fetch from GitHub for arbitrary `gist_id` values unless the room has been initialized by an authenticated owner action (create or import). The `initialized` flag and `ownerUserId` are stored in DO SQLite.
-- **Persistence**: Uses DO SQLite storage (`this.ctx.storage.sql`) for the Yjs snapshot and metadata (`gistId`, `filename`, `etag`/`updatedAt`, `editTokenHash`, `lastSavedAt`, `pendingSync`, `pendingSince`, `initialized`, `ownerUserId`).
+- **Owner token handling**: The owner's GitHub access token is stored **encrypted at rest in Workers KV** (AES-GCM via WebCrypto, keyed by a Workers secret). Encrypted blobs are prefixed with a key version ID (e.g., `v1:<iv>:<ciphertext>`) so that encryption keys can be rotated without invalidating existing tokens — on read, the DO selects the correct decryption key by version, and re-encrypts under the current key version lazily on next write. The DO reads the token from KV when it needs to write to GitHub and caches it in memory while the owner is connected. If the owner disconnects, the in-memory cache is dropped and `pendingSync` is set; saves resume when the owner reconnects and the token is re-read from KV.
+- **Initialized room**: The DO refuses to serve content for arbitrary `gist_id` values unless the room has been initialized by an authenticated owner action (create or import). The `initialized` flag and `ownerUserId` are stored in DO SQLite.
+- **Persistence**: Uses DO SQLite storage (`this.ctx.storage.sql`) for the Yjs snapshot, last canonical markdown string, and metadata (`gistId`, `filename`, `etag`/`updatedAt`, `editTokenHash`, `lastSavedAt`, `pendingSync`, `pendingSince`, `initialized`, `ownerUserId`).
 - **Limits**: Maximum document size of 2 MB enforced on inbound Yjs updates. Per-IP and per-room WebSocket connection limits enforced to prevent resource exhaustion. Message rate limiting applied to all connections.
 
 ### Cloudflare Worker (Hono + routePartykitRequest)
@@ -115,7 +116,8 @@ The Worker handles all HTTP traffic. WebSocket upgrades are routed to the GistRo
 - **Provider**: `YProvider` from `y-partyserver/provider` connecting to the GistRoom DO. Configured with `party: "gist-room"` and `room: gistId`.
 - **Awareness**: Shows collaborator cursors, selections, and names (pulled from GitHub profile via JWT)
 - **Markdown serialization**: `getMarkdown()` from `@milkdown/utils` extracts the current document as a markdown string for saving to the Gist. On load, markdown is passed as `defaultValue` and parsed through the remark pipeline into ProseMirror nodes.
-- **Custom messages**: Uses `provider.sendMessage()` and `provider.on("custom-message", ...)` for non-Yjs communication (sync status, staleness warnings)
+- **Custom messages**: Uses `provider.sendMessage()` and `provider.on("custom-message", ...)` for non-Yjs communication (sync status, staleness warnings, and the markdown serialization protocol)
+- **Markdown serialization protocol**: Authorized clients respond to `request-markdown` messages from the DO by calling `getMarkdown()` and sending the result back as a `canonical-markdown` message. Clients also handle `needs-init` (fetch and load initial content) and `reload-remote` (reset editor with fresh remote markdown) messages.
 - **Plugins**: `plugin-listener` for observing document changes (debounced save trigger), `plugin-slash` for slash commands, `plugin-block` for block-level drag-and-drop
 
 ## Tech Stack
@@ -165,11 +167,13 @@ These are handled by the Cloudflare Worker (Hono router). WebSocket routing is h
 3. `YProvider` syncs the update to the GistRoom DO via WebSocket
 4. `YServer` broadcasts the update to all other connected clients automatically
 5. `YServer` calls `onSave()` after the debounce period (configured via `callbackOptions`)
-6. `onSave()` writes the snapshot to DO SQLite storage
+6. `onSave()` writes the Yjs snapshot to DO SQLite storage
 7. If the owner is not connected: `onSave()` sets `pendingSync = true` and records `pendingSince` timestamp. Done.
-8. If the owner is connected: `onSave()` reads the owner's GitHub token from KV (or in-memory cache) and calls `PATCH /gists/:id` with `If-Match: <etag>` (conditional write)
-9. If 412 (Precondition Failed — external edit detected): autosync pauses, clients are notified with a "Remote changed" custom message. Owner chooses to push local or discard and reload remote.
-10. If success: `onSave()` stores the new `etag` and `updated_at` from the response
+8. If the owner is connected: `onSave()` sends a `request-markdown` custom message to an authorized client
+9. The client calls `getMarkdown()` and responds with a `canonical-markdown` message containing the markdown string
+10. `onSave()` stores the canonical markdown in DO SQLite, then reads the owner's GitHub token from KV (or in-memory cache) and calls `PATCH /gists/:id` with `If-Match: <etag>` (conditional write)
+11. If 412 (Precondition Failed — external edit detected): autosync pauses, DO fetches remote markdown for diff display, clients are notified with a `remote-changed` custom message including the remote markdown. Owner chooses to push local or discard and reload remote.
+12. If success: `onSave()` stores the new `etag` and `updated_at` from the response
 
 ## Error Handling
 
@@ -181,8 +185,9 @@ These are handled by the Cloudflare Worker (Hono router). WebSocket routing is h
 
 1. Client creates a `YProvider` with `party: "gist-room"` and `room: gistId`; `routePartykitRequest` routes the WebSocket to the GistRoom DO
 2. `YServer` calls `onLoad()` — if DO SQLite has a snapshot, apply it to `this.document`
-3. If no snapshot → `onLoad()` fetches from GitHub Gist API, applies content to `this.document`
-4. `YServer` runs the Yjs sync handshake with the client automatically; client receives the Yjs state and Milkdown renders it as styled WYSIWYG content via the remark pipeline
+3. If no snapshot and room is initialized → DO sends a `needs-init` custom message to the first connecting authorized client
+4. The client fetches the Gist content (via API), loads it into the editor as `defaultValue`, and the resulting Yjs updates flow back to the DO and are persisted on the next `onSave()` cycle
+5. If a snapshot exists → `YServer` runs the Yjs sync handshake with the client automatically; client receives the Yjs state and Milkdown renders it as styled WYSIWYG content via the remark pipeline
 
 ## Auth Model
 
@@ -223,12 +228,13 @@ Edit access is controlled via **capability-based edit tokens**, not by authentic
 ### Raw Endpoint
 
 - `/:gist_id/raw` responds with `Content-Type: text/plain; charset=utf-8`
+- Raw endpoint serves the last canonical markdown stored in DO SQLite (updated each time the DO successfully requests markdown from a connected client during `onSave()`). Content may lag behind live Yjs state by up to one save debounce interval when editors are connected.
 - `X-Content-Type-Options: nosniff` header to prevent browser content sniffing
 - `Cache-Control: no-cache` to ensure scripted consumers (curl, CI, AI agents) always get fresh content while still allowing conditional requests (ETag/If-None-Match)
 
 ### Gist Content Access
 
-- The read-only viewer and raw endpoint only serve content for initialized rooms — the DO refuses to fetch from GitHub for arbitrary `gist_id` values without a prior owner create/import action
+- The read-only viewer and raw endpoint only serve content for initialized rooms — the DO refuses to serve content for arbitrary `gist_id` values without a prior owner create/import action
 - Anonymous viewer requests are rate-limited by IP to prevent gist_id enumeration
 
 ### CSRF Protection
