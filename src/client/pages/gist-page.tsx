@@ -170,6 +170,7 @@ export function GistPage() {
 
     let cancelled = false;
 
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: This is a complex async function that needs to be split into smaller functions (TODO: work on this)
     async function resolve() {
       try {
         const metaRes = await fetch(`/api/gists/${gistId}`);

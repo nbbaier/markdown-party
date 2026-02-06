@@ -22,6 +22,9 @@ import {
   type SyncState,
 } from "./shared/messages";
 
+const EDIT_CAP_REGEXP = /gp_edit_cap=([^;]+)/;
+const SESSION_COOKIE_REGEXP = /__session=([^;]+)/;
+
 interface PendingMarkdownRequest {
   resolve: (markdown: string | null) => void;
   timeout: ReturnType<typeof setTimeout>;
@@ -77,7 +80,7 @@ export class GistRoom extends YServer<WorkerEnv> {
   // Lifecycle Methods
   // ============================================================================
 
-  // biome-ignore lint/suspicious/useAwait: Called by framework
+  // biome-ignore lint/suspicious/useAwait: Called by framework (TODO: improve this)
   async onStart(): Promise<void> {
     console.log(`[GistRoom ${this.name}] Server started`);
     this.ensureSchema();
@@ -483,6 +486,7 @@ export class GistRoom extends YServer<WorkerEnv> {
     this.broadcastSyncStatus("conflict");
   }
 
+  // biome-ignore lint/suspicious/useAwait: Called by framework (TODO: improve this)
   private async handleSyncError(statusCode: number): Promise<void> {
     this.autoSyncPaused = true;
     this.retryAttempt++;
@@ -689,7 +693,6 @@ export class GistRoom extends YServer<WorkerEnv> {
   // ============================================================================
 
   // biome-ignore lint/suspicious/useAwait: Called by framework
-  async handleSyncError
   private async checkAndHandlePendingSyncExpiry(): Promise<boolean> {
     const pendingSync = this.getMeta("pendingSync");
     if (pendingSync !== "true") {
@@ -1005,7 +1008,8 @@ export class GistRoom extends YServer<WorkerEnv> {
   // Room Initialization
   // ============================================================================
 
-  async initializeRoom(
+  // biome-ignore lint/suspicious/useAwait: Called by framework (TODO: improve this)
+  private async initializeRoom(
     gistId: string,
     filename: string,
     ownerUserId: string,
@@ -1030,6 +1034,7 @@ export class GistRoom extends YServer<WorkerEnv> {
   // Markdown Protocol
   // ============================================================================
 
+  // biome-ignore lint/suspicious/useAwait: Called by framework (TODO: improve this)
   private async requestCanonicalMarkdown(): Promise<string | null> {
     const authorizedConnection = this.getAuthorizedConnection();
     if (!authorizedConnection) {
@@ -1112,7 +1117,7 @@ export class GistRoom extends YServer<WorkerEnv> {
       return false;
     }
 
-    const match = cookieHeader.match(/gp_edit_cap=([^;]+)/);
+    const match = cookieHeader.match(EDIT_CAP_REGEXP);
     if (!match) {
       return false;
     }
@@ -1136,7 +1141,7 @@ export class GistRoom extends YServer<WorkerEnv> {
       return false;
     }
 
-    const sessionMatch = cookieHeader.match(/__session=([^;]+)/);
+    const sessionMatch = cookieHeader.match(SESSION_COOKIE_REGEXP);
     if (!sessionMatch) {
       return false;
     }
@@ -1159,6 +1164,7 @@ export class GistRoom extends YServer<WorkerEnv> {
     }
   }
 
+  // biome-ignore lint/suspicious/useAwait: Called by framework (TODO: improve this)
   private async requestCanonicalMarkdownFromConnection(
     connection: Connection
   ): Promise<string | null> {
