@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { fetchWithCsrf } from "../lib/fetch-with-csrf";
 
 interface User {
   userId: string;
@@ -33,7 +34,7 @@ export function useAuth(): AuthState & {
         setState({ user, loading: false, error: null });
       } else if (response.status === 401) {
         // Try to refresh the session
-        const refreshResponse = await fetch("/api/auth/refresh", {
+        const refreshResponse = await fetchWithCsrf("/api/auth/refresh", {
           method: "POST",
           credentials: "include",
         });
@@ -66,7 +67,7 @@ export function useAuth(): AuthState & {
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", {
+      await fetchWithCsrf("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });

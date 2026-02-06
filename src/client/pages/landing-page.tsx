@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { fetchWithCsrf } from "../lib/fetch-with-csrf";
 import "./landing-page.css";
 
 export function LandingPage() {
@@ -23,7 +24,7 @@ export function LandingPage() {
     setError(null);
 
     try {
-      const res = await fetch(`/api/gists/${gistId}/import`, {
+      const res = await fetchWithCsrf(`/api/gists/${gistId}/import`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: gistUrl }),

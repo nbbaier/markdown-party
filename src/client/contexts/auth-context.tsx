@@ -6,6 +6,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { fetchWithCsrf } from "../lib/fetch-with-csrf";
 
 interface User {
   userId: string;
@@ -48,7 +49,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const refreshResponse = await fetch("/api/auth/refresh", {
+      const refreshResponse = await fetchWithCsrf("/api/auth/refresh", {
         method: "POST",
         credentials: "include",
       });
@@ -69,7 +70,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const logout = useCallback(async () => {
     try {
-      await fetch("/api/auth/logout", {
+      await fetchWithCsrf("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       });

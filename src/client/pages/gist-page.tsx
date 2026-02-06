@@ -1,13 +1,22 @@
 import { MilkdownProvider } from "@milkdown/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
-import type { EditorHandle } from "../components/editor";
-import { Editor } from "../components/editor";
+import {
+  MessageTypeDiscardLocal,
+  MessageTypePushLocal,
+} from "../../shared/messages";
+import { ConflictModal } from "../components/conflict-modal";
+import type { EditorHandle } from "../components/Editor";
+import { Editor } from "../components/Editor";
 import { MarkdownViewer } from "../components/markdown-viewer";
+import { PendingSyncBanner } from "../components/pending-sync-banner";
+import { SyncStatusBar } from "../components/sync-status-bar";
 import { useAuth } from "../contexts/auth-context";
 import { useCollabProvider } from "../hooks/use-collab-provider";
 import { useEditToken } from "../hooks/use-edit-token";
 import { useMarkdownProtocol } from "../hooks/use-markdown-protocol";
+import { useSyncStatus } from "../hooks/use-sync-status";
+import { useWarnOnExit } from "../hooks/use-warn-on-exit";
 import { NotFoundPage } from "./not-found-page";
 import "./gist-page.css";
 
@@ -44,6 +53,11 @@ function EditorView({
     []
   );
 
+  const { status, send, dismissConflict } = useSyncStatus({
+    provider,
+    getMarkdown,
+  });
+
   const handleNeedsInit = useCallback(
     async (initGistId: string, _filename: string) => {
       try {
@@ -73,22 +87,36 @@ function EditorView({
     onReloadRemote: handleReloadRemote,
   });
 
+  useWarnOnExit(
+    status.syncState === "pending-sync" || status.syncState === "conflict"
+  );
+
   const handleExport = () => {
     const markdown = editorRef.current?.getMarkdown() || "";
     setExportedMarkdown(markdown);
   };
 
-  // biome-ignore lint/suspicious/noEmptyBlockStatements: Placeholder handler
-  const handleChange = () => {};
+  const handlePushLocal = useCallback(() => {
+    send({ type: MessageTypePushLocal, payload: {} });
+    dismissConflict();
+  }, [send, dismissConflict]);
+
+  const handleDiscardLocal = useCallback(() => {
+    send({ type: MessageTypeDiscardLocal, payload: {} });
+    dismissConflict();
+  }, [send, dismissConflict]);
 
   return (
     <>
       <div className="gist-header">
         <h2>Editing: {gistId}</h2>
         <div className="gist-header-info">
-          <span className={`connection-status ${connectionState}`}>
-            {connectionState}
-          </span>
+          <SyncStatusBar
+            connectionState={connectionState}
+            nextRetryAt={status.nextRetryAt}
+            retryAttempt={status.retryAttempt}
+            syncState={status.syncState}
+          />
         </div>
         <div className="gist-actions">
           <button
@@ -101,6 +129,24 @@ function EditorView({
         </div>
       </div>
 
+      {status.syncState === "pending-sync" && status.pendingSince && (
+        <PendingSyncBanner
+          expiresAt={status.expiresAt}
+          getMarkdown={getMarkdown}
+          pendingSince={status.pendingSince}
+        />
+      )}
+
+      {status.syncState === "conflict" &&
+        status.remoteMarkdown !== undefined && (
+          <ConflictModal
+            localMarkdown={status.localMarkdown ?? getMarkdown()}
+            onDiscardLocal={handleDiscardLocal}
+            onPushLocal={handlePushLocal}
+            remoteMarkdown={status.remoteMarkdown}
+          />
+        )}
+
       <div className="editor-wrapper">
         {doc ? (
           <MilkdownProvider>
@@ -108,7 +154,6 @@ function EditorView({
               awareness={awareness}
               defaultValue={defaultValue}
               doc={doc}
-              onChange={handleChange}
               ref={editorRef}
             />
           </MilkdownProvider>

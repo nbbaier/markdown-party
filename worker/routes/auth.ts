@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import { encrypt } from "../../src/shared/encryption";
 import { signJwt, verifyJwt } from "../../src/shared/jwt";
+import { generateCsrfToken, setCsrfCookie } from "../shared/csrf";
 
 interface Env {
   Bindings: {
@@ -169,6 +170,8 @@ authRoutes.get("/github/callback", async (c) => {
     maxAge: 3600,
   });
 
+  setCsrfCookie(c, generateCsrfToken());
+
   return c.redirect("/", 302);
 });
 
@@ -215,6 +218,8 @@ authRoutes.post("/refresh", async (c) => {
       path: "/",
       maxAge: 3600,
     });
+
+    setCsrfCookie(c, generateCsrfToken());
 
     return c.json({ ok: true });
   } catch {

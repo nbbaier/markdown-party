@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { NavBar } from "./NavBar";
+import { NavBar } from "./nav-bar";
 import "./layout.css";
 
 export interface LayoutProps {
