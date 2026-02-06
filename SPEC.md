@@ -39,7 +39,7 @@ A web app at `gist.party` that provides real-time collaborative markdown editing
 
 1. Gist owner clicks "Share" → generates an **edit link**: `gist.party/<gist_id>#edit=<token>` (token in URL fragment, never sent to the server via Referer)
 2. Collaborator opens the edit link
-3. Client extracts the edit token from the fragment and POSTs it to `POST /api/gists/:id/claim` to exchange it for a short-lived **edit capability cookie** (HttpOnly, Secure, SameSite=Strict, path-scoped to `/parties/gist-room/:id`)
+3. Client extracts the edit token from the fragment and POSTs it to `POST /api/gists/:gist_id/claim` to exchange it for a short-lived **edit capability cookie** (HttpOnly, Secure, SameSite=Strict, path-scoped to `/parties/gist-room/:gist_id`)
 4. If authenticated + valid edit capability: full edit access, edits saved to GitHub via owner's token (GitHub attributes all writes to the Gist owner, not the collaborator)
 5. If authenticated but no edit capability: read-only rendered view (same as anonymous)
 6. If unauthenticated: read-only rendered view of the markdown
@@ -81,8 +81,8 @@ Each Gist ID maps to a PartyServer Durable Object. The `GistRoom` class extends 
 
 The GistRoom:
 
-- **`onLoad()`**: Called once when the DO starts or wakes from hibernation. Loads the Yjs snapshot from DO SQLite storage. If no snapshot exists, fetches the Gist content from the GitHub API and applies it to `this.document` (the Yjs `Y.Doc` provided by `YServer`).
-- **`onSave()`**: Called by `YServer` after edits (debounced via `callbackOptions`). Writes the Yjs snapshot to DO SQLite storage. If the owner is connected, also PATCHes the Gist via the GitHub API (with conditional write). If the owner is not connected, marks the document as "pending sync".
+- **`onLoad()`**: Called once when the DO starts or wakes from hibernation. Loads the Yjs snapshot from DO SQLite storage. If no snapshot exists, fetches the Gist content from the GitHub API (using the owner's encrypted token from KV — reads do not require the owner to be connected) and applies it to `this.document` (the Yjs `Y.Doc` provided by `YServer`).
+- **`onSave()`**: Called by `YServer` after edits (debounced to 30 seconds via `callbackOptions`, with idle-save and flush-on-disconnect). Writes the Yjs snapshot to DO SQLite storage. If the owner is connected, also PATCHes the Gist via the GitHub API (with conditional write). If the owner is not connected, marks the document as "pending sync".
 - **GitHub API errors**: 403/429/5xx responses pause autosync with exponential backoff and emit a custom message so clients show a clear "Error (retrying)" state and allow a manual retry by the owner.
 - **`isReadOnly(connection)`**: Returns `true` for connections without a valid edit capability cookie — `YServer` silently drops incoming Yjs updates from read-only connections. Awareness updates from read-only connections are also rejected to prevent cursor spoofing.
 - **`onCustomMessage(connection, message)`**: Handles non-Yjs messages over the same WebSocket (sync status, staleness warnings). Action messages (merge/overwrite decisions) are restricted to the owner connection only.
@@ -90,8 +90,8 @@ The GistRoom:
 - **Staleness detection**: Before each GitHub PATCH in `onSave()`, uses a **conditional write** with `If-Match: <etag>`. If the API returns 412 (Precondition Failed), autosync pauses and a "Remote changed" custom message is sent to connected clients.
 - **Conflict resolution on load**: If the stored snapshot is older than 5 minutes, `onLoad()` validates against GitHub. If `pendingSync` is true, the DO **does not overwrite local Yjs state** — it enters a conflict state and requires an explicit owner decision ("push local to remote" vs "discard local, reload remote"). If `pendingSync` is false and the remote is newer, the external markdown content is applied to the Yjs doc.
 - **Pending sync UX**: If the owner is offline and `pendingSync` persists, clients show a persistent banner and warn on exit that changes are not yet synced to GitHub.
-- **Pending sync durability**: Unsynced state is retained for 30 days. During this window, clients show an expiry date and offer a one-click "Download .md" export. After expiry, the unsynced snapshot is discarded.
-- **Owner token handling**: The owner's GitHub access token is stored **encrypted at rest in Workers KV** (AES-GCM via WebCrypto, keyed by a Workers secret). The DO reads the token from KV when it needs to write to GitHub and caches it in memory while the owner is connected. If the owner disconnects, the in-memory cache is dropped and `pendingSync` is set; saves resume when the owner reconnects and the token is re-read from KV.
+- **Pending sync durability**: Unsynced state is retained for 30 days. During this window, clients show an expiry date and offer a one-click "Download .md" export. After expiry, the unsynced snapshot is discarded. **Note**: If the owner never reconnects, collaborators with active sessions will see the expiry banner but have no other notification mechanism (e.g., email). This is acceptable for MVP; post-MVP may add notification channels.
+- **Owner token handling**: The owner's GitHub access token is stored **encrypted at rest in Workers KV** (AES-GCM via WebCrypto, keyed by a Workers secret). Encrypted blobs are prefixed with a key version ID (e.g., `v1:<iv>:<ciphertext>`) so that encryption keys can be rotated without invalidating existing tokens — on read, the DO selects the correct decryption key by version, and re-encrypts under the current key version lazily on next write. The DO reads the token from KV when it needs to read from or write to GitHub and caches it in memory while the owner is connected. If the owner disconnects, the in-memory cache is dropped and `pendingSync` is set; saves resume when the owner reconnects and the token is re-read from KV.
 - **Initialized room**: The DO refuses to fetch from GitHub for arbitrary `gist_id` values unless the room has been initialized by an authenticated owner action (create or import). The `initialized` flag and `ownerUserId` are stored in DO SQLite.
 - **Persistence**: Uses DO SQLite storage (`this.ctx.storage.sql`) for the Yjs snapshot and metadata (`gistId`, `filename`, `etag`/`updatedAt`, `editTokenHash`, `lastSavedAt`, `pendingSync`, `pendingSince`, `initialized`, `ownerUserId`).
 - **Limits**: Maximum document size of 2 MB enforced on inbound Yjs updates. Per-IP and per-room WebSocket connection limits enforced to prevent resource exhaustion. Message rate limiting applied to all connections.
@@ -109,7 +109,7 @@ The Worker handles all HTTP traffic. WebSocket upgrades are routed to the GistRo
 
 ### Client
 
-- **Editor**: Milkdown (`@milkdown/core` + `@milkdown/react`) — a markdown-native WYSIWYG editor built on ProseMirror and remark. Users see rendered content (headings, bold, lists) while editing, but the internal model is a markdown AST, preserving near-lossless round-trip fidelity with the Gist's markdown source.
+- **Editor**: Milkdown (`@milkdown/core` + `@milkdown/react`) — a markdown-native WYSIWYG editor built on ProseMirror and remark. Users see rendered content (headings, bold, lists) while editing, but the internal model is a markdown AST, preserving near-lossless round-trip fidelity with the Gist's markdown source. **Known limitation**: ProseMirror's schema may normalize some markdown constructs (trailing whitespace, reference link style, list indentation). The Gist's markdown source will reflect ProseMirror's canonical form after the first edit, not necessarily the original formatting.
 - **Presets**: `@milkdown/preset-commonmark` for core markdown, `@milkdown/preset-gfm` for GitHub Flavored Markdown (tables, strikethrough, task lists)
 - **Collaboration**: `@milkdown/plugin-collab` wraps y-prosemirror (ySyncPlugin, yCursorPlugin, yUndoPlugin). The `CollabService` binds to the Yjs `Y.Doc` and connects/disconnects as needed.
 - **Provider**: `YProvider` from `y-partyserver/provider` connecting to the GistRoom DO. Configured with `party: "gist-room"` and `room: gistId`.
@@ -133,10 +133,10 @@ The Worker handles all HTTP traffic. WebSocket upgrades are routed to the GistRo
 | Auth              | GitHub OAuth 2.0 (PKCE + state)                |
 | Session           | Signed JWT cookies (verified in Worker + DO)   |
 | Session store     | Workers KV                                     |
-| Token encryption  | AES-GCM via WebCrypto (Workers secret key)     |
+| Token encryption  | AES-GCM via WebCrypto (versioned Workers secret key) |
 | Storage           | GitHub Gists API (eventual persistence)        |
 | DO persistence    | Durable Object SQLite storage (snapshots)      |
-| Markdown render   | markdown-it (for read-only view)               |
+| Markdown render   | remark + rehype (shared AST with Milkdown for read-only view) |
 | Deployment        | Cloudflare Workers + Durable Objects           |
 
 ## API Routes
@@ -148,11 +148,12 @@ These are handled by the Cloudflare Worker (Hono router). WebSocket routing is h
 | `/api/auth/github`                 | GET    | Initiates GitHub OAuth flow                |
 | `/api/auth/github/callback`        | GET    | OAuth callback, sets session               |
 | `/api/auth/refresh`                | POST   | Refreshes JWT cookie using server session  |
+| `/api/auth/logout`                 | POST   | Clears session cookie and revokes server-side session in KV |
 | `/api/gists`                       | POST   | Creates a new Gist, returns `{ gist_id, edit_token }` |
-| `/api/gists/:id`                   | GET    | Returns Gist metadata                      |
-| `/api/gists/:id/import`            | POST   | Imports an existing Gist, initializes room (owner only) |
-| `/api/gists/:id/claim`             | POST   | Exchanges edit token (from URL fragment) for a short-lived edit capability cookie |
-| `/api/gists/:id/edit-token`        | POST   | Revokes current edit token, kicks existing editor sockets, generates a new one (owner only) |
+| `/api/gists/:gist_id`                   | GET    | Returns Gist metadata                      |
+| `/api/gists/:gist_id/import`            | POST   | Imports an existing Gist, initializes room (owner only) |
+| `/api/gists/:gist_id/claim`             | POST   | Exchanges edit token (from URL fragment) for a short-lived edit capability cookie |
+| `/api/gists/:gist_id/edit-token`        | POST   | Revokes current edit token, kicks existing editor sockets, generates a new one (owner only) |
 | `/parties/gist-room/:gist_id`      | GET    | WebSocket upgrade (handled by `routePartykitRequest`) |
 | `/:gist_id`                        | GET    | Serves editor (if valid edit token) or viewer |
 | `/:gist_id/raw`                    | GET    | Returns raw markdown as `text/plain`       |
@@ -188,7 +189,7 @@ These are handled by the Cloudflare Worker (Hono router). WebSocket routing is h
 - **GitHub OAuth** with `gist` scope (read/write Gists), using PKCE + `state` parameter
 - Access token stored **server-side only, encrypted at rest** in Workers KV (AES-GCM via WebCrypto, keyed by a Workers secret). The token is never sent to the client or stored in localStorage. The HTTP-only JWT session cookie references the session; the DO reads the encrypted token from KV on demand.
 - **GitHub sync requires the owner to be connected** (policy decision, not a technical constraint): the DO caches the owner's token in memory while connected. If the owner disconnects, the in-memory cache is dropped and `pendingSync` is set; saves resume when the owner reconnects and the token is re-read from KV.
-- Collaborators authenticate to get cursor identity but do not need `gist` scope — only the owner's token is used for GitHub writes. **All GitHub Gist writes are attributed to the Gist owner**, regardless of which collaborator made the edit.
+- Collaborators authenticate to get cursor identity but do not need `gist` scope — the OAuth flow requests only `read:user` for collaborators (sufficient for profile info used in cursor labels). Only the owner's token is used for GitHub writes. **All GitHub Gist writes are attributed to the Gist owner**, regardless of which collaborator made the edit.
 - **JWT cookies** must include `exp` (expiration), `aud` (audience), `iss` (issuer), and use a strong signing key. Rotation strategy: short-lived JWTs (e.g., 1 hour) with silent refresh via the session in KV.
 - **Silent refresh**: `POST /api/auth/refresh` rotates the JWT using the server-side session in KV; if refresh fails, clients fall back to read-only and prompt for re-auth.
 
@@ -200,7 +201,7 @@ Edit access is controlled via **capability-based edit tokens**, not by authentic
 - The token hash (SHA-256) is stored in Durable Object storage alongside the Gist metadata
 - The owner receives the edit link: `gist.party/<gist_id>#edit=<token>` (token in URL fragment to prevent leakage via Referer headers, server logs, and browser history sync)
 - **Edit token lifetime**: Long-lived until revoked by the owner (no automatic expiry)
-- **Token exchange flow**: the client extracts the token from the URL fragment and POSTs it to `/api/gists/:id/claim`. The server validates the hash against DO storage and issues a short-lived **edit capability cookie** (HttpOnly, Secure, SameSite=Strict, path-scoped).
+- **Token exchange flow**: the client extracts the token from the URL fragment and POSTs it to `/api/gists/:gist_id/claim`. The server validates the hash against DO storage and issues a short-lived **edit capability cookie** (HttpOnly, Secure, SameSite=Strict, path-scoped to `/parties/gist-room/:gist_id`).
 - **Capability cookie TTL**: 24 hours (renewed on successful edit token claim)
 - **Server-side enforcement**: the Durable Object validates the edit capability cookie on WebSocket connection. Connections without a valid capability are admitted as **read-only** — incoming Yjs updates and awareness updates from those connections are silently dropped.
 - The owner can revoke an edit token and generate a new one at any time. **Revocation kicks existing editor WebSocket connections** that were using the old token, forcing them to re-claim.
@@ -216,13 +217,14 @@ Edit access is controlled via **capability-based edit tokens**, not by authentic
 
 ### Markdown Rendering
 
-- markdown-it configured with `html: false` to prevent raw HTML injection
+- remark pipeline configured with `rehype-sanitize` to strip raw HTML and prevent injection
 - All rendered output served with a restrictive Content Security Policy: no inline scripts, restricted `img-src` and `frame-src`
 
 ### Raw Endpoint
 
 - `/:gist_id/raw` responds with `Content-Type: text/plain; charset=utf-8`
 - `X-Content-Type-Options: nosniff` header to prevent browser content sniffing
+- `Cache-Control: no-cache` to ensure scripted consumers (curl, CI, AI agents) always get fresh content while still allowing conditional requests (ETag/If-None-Match)
 
 ### Gist Content Access
 
@@ -231,7 +233,8 @@ Edit access is controlled via **capability-based edit tokens**, not by authentic
 
 ### CSRF Protection
 
-- All state-changing POST endpoints (`/api/gists`, `/api/gists/:id/import`, `/api/gists/:id/claim`, `/api/gists/:id/edit-token`) are protected with SameSite cookies + double-submit cookie CSRF tokens
+- All state-changing POST endpoints (`/api/gists`, `/api/gists/:gist_id/import`, `/api/gists/:gist_id/claim`, `/api/gists/:gist_id/edit-token`, `/api/auth/logout`) are protected with SameSite cookies + double-submit CSRF tokens
+- The CSRF token is set as a non-HttpOnly cookie (`__csrf`) on auth responses (login callback and refresh). The SPA reads the cookie value and sends it as an `X-CSRF-Token` header on all POST requests. The server validates that the header matches the cookie. SameSite=Strict on the session cookie provides the primary protection; the double-submit token is defense-in-depth.
 
 ### Referrer Policy
 
@@ -259,10 +262,10 @@ Edit access is controlled via **capability-based edit tokens**, not by authentic
 - Sync status UI: "Saved", "Saving…", "Pending sync (owner offline)", "Remote changed — push or discard?", "Error (retrying)"
 - Conflict resolution UI (owner only): modal with explicit "Push local" vs "Discard local" actions and a preview diff
 - Error handling UX: GitHub API failures pause autosync with backoff and retry; auth refresh failure falls back to read-only
-- Encrypted GitHub token storage (AES-GCM in Workers KV)
+- Encrypted GitHub token storage (AES-GCM in Workers KV, versioned keys for rotation)
 - Read-only rendered view for anonymous users and users without edit capability
 - Raw markdown endpoint
-- Security hardening: XSS-safe markdown rendering (`html: false`, CSP), `nosniff` on raw endpoint, `Referrer-Policy: strict-origin`, CSRF protection, IP rate-limiting on anonymous views, WebSocket rate limiting, 2 MB document size limit
+- Security hardening: XSS-safe markdown rendering (`rehype-sanitize`, CSP), `nosniff` + `Cache-Control: no-cache` on raw endpoint, `Referrer-Policy: strict-origin`, CSRF protection (double-submit cookie), IP rate-limiting on anonymous views, WebSocket rate limiting, 2 MB document size limit
 
 ### Out of Scope (Future)
 
@@ -282,5 +285,5 @@ Edit access is controlled via **capability-based edit tokens**, not by authentic
 2. **Multi-file Gists (post-MVP)**: MVP targets single-file Gists. What is the desired post-MVP behavior (file picker, separate docs per file, or full multi-file editor)?
 3. ~~**Pending sync durability**: If `pendingSync` persists because the owner never reconnects, what is the retention and user-facing behavior (expiry window, export prompt, or eventual discard)?~~ **Resolved**: retain for 30 days with expiry banner + one-click export; discard after expiry.
 4. ~~**Gist visibility**: Should new Gists be created as public or secret? Configurable per-document?~~ **Resolved**: default to secret; user can choose on create.
-4. ~~**Stale sessions**: If a GistRoom DO has a persisted snapshot but the Gist was edited externally, how aggressively should we check for staleness?~~ **Resolved**: Use `If-Match: <etag>` conditional writes on every PATCH. In `onLoad()`, validate the snapshot against GitHub if it's older than 5 minutes. If stale and `pendingSync` is true, enter conflict state (owner decides). If stale and no pending edits, apply remote content.
-5. ~~**Deployment topology**: Deploy client and server together on PartyKit (it can serve static assets), or split across PartyKit + Vercel?~~ **Resolved**: Single Cloudflare deployment — Worker serves the SPA and API, Durable Objects handle real-time collaboration.
+5. ~~**Stale sessions**: If a GistRoom DO has a persisted snapshot but the Gist was edited externally, how aggressively should we check for staleness?~~ **Resolved**: Use `If-Match: <etag>` conditional writes on every PATCH. In `onLoad()`, validate the snapshot against GitHub if it's older than 5 minutes. If stale and `pendingSync` is true, enter conflict state (owner decides). If stale and no pending edits, apply remote content.
+6. ~~**Deployment topology**: Deploy client and server together on PartyKit (it can serve static assets), or split across PartyKit + Vercel?~~ **Resolved**: Single Cloudflare deployment — Worker serves the SPA and API, Durable Objects handle real-time collaboration.
