@@ -1,4 +1,6 @@
-# gist.party v2 — Specification
+# markdown.party — Specification
+
+(Formerly gist.party)
 
 > Instant collaborative markdown editing. No account required. Persist to GitHub when you're ready.
 
