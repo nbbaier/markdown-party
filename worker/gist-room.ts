@@ -421,7 +421,7 @@ export class GistRoom extends YServer<WorkerEnv> {
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.ownerToken}`,
       Accept: "application/vnd.github.v3+json",
-      "User-Agent": "gist-party",
+      "User-Agent": "markdown-party",
       "Content-Type": "application/json",
     };
     if (storedEtag && !options?.force) {
@@ -544,7 +544,7 @@ export class GistRoom extends YServer<WorkerEnv> {
         headers: {
           Authorization: `Bearer ${this.ownerToken}`,
           Accept: "application/vnd.github.v3+json",
-          "User-Agent": "gist-party",
+          "User-Agent": "markdown-party",
         },
       });
 
@@ -785,7 +785,7 @@ export class GistRoom extends YServer<WorkerEnv> {
         headers: {
           Authorization: `Bearer ${this.ownerToken}`,
           Accept: "application/vnd.github.v3+json",
-          "User-Agent": "gist-party",
+          "User-Agent": "markdown-party",
           "If-None-Match": storedEtag,
         },
       });

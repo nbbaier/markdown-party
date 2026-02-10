@@ -1,4 +1,4 @@
-# gist-party
+# markdown-party
 
 Real-time collaborative markdown editor backed by GitHub Gists, deployed on Cloudflare Workers + Durable Objects.
 

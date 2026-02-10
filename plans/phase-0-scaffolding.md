@@ -2,6 +2,8 @@
 
 > **Goal**: A deployable skeleton — Vite dev server, Worker, and a single DO all running locally. `wrangler dev` serves the SPA and a hello-world DO accepts a WebSocket connection.
 
+> **Note**: This plan references the original project name "gist-party". The project has since been renamed to "markdown-party". See the new spec for the current direction.
+
 ## Prerequisites
 
 None. This is the foundation for everything.

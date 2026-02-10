@@ -2,6 +2,8 @@
 
 > **Goal**: Edits auto-save to GitHub with conflict detection. All markdown comes from connected clients via the serialization protocol — the DO never parses or generates markdown.
 
+> **Note**: This plan references the original project name "gist-party". The project has since been renamed to "markdown-party". See the new spec for the current direction.
+
 ---
 
 ## Prerequisites

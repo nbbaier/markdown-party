@@ -112,7 +112,7 @@ gistRoutes.post("/", authMiddleware, async (c) => {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github.v3+json",
       "Content-Type": "application/json",
-      "User-Agent": "gist-party",
+      "User-Agent": "markdown-party",
     },
     body: JSON.stringify({
       description,
@@ -168,7 +168,7 @@ gistRoutes.post("/:gist_id/import", authMiddleware, async (c) => {
       headers: {
         Authorization: `Bearer ${token}`,
         Accept: "application/vnd.github.v3+json",
-        "User-Agent": "gist-party",
+        "User-Agent": "markdown-party",
       },
     }
   );

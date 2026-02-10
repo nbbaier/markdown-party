@@ -120,7 +120,7 @@ authRoutes.get("/github/callback", async (c) => {
     headers: {
       Authorization: `Bearer ${tokenData.access_token}`,
       Accept: "application/vnd.github.v3+json",
-      "User-Agent": "gist-party",
+      "User-Agent": "markdown-party",
     },
   });
 
