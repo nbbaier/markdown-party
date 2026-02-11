@@ -1,23 +1,11 @@
-import { BrowserRouter, Route, Routes } from "react-router-dom";
-import { Layout } from "./client/components/Layout";
-import { AuthProvider } from "./client/contexts/auth-context";
-import { GistPage } from "./client/pages/gist-page";
-import { LandingPage } from "./client/pages/landing-page";
-import "./index.css";
+import Editor from "./components/Editor";
+import { Toaster } from "@/components/ui/sonner";
 
-function App() {
+export default function App() {
   return (
-    <AuthProvider>
-      <BrowserRouter>
-        <Layout>
-          <Routes>
-            <Route element={<LandingPage />} path="/" />
-            <Route element={<GistPage />} path="/:gistId" />
-          </Routes>
-        </Layout>
-      </BrowserRouter>
-    </AuthProvider>
+    <>
+      <Editor />
+      <Toaster position="bottom-right" />
+    </>
   );
 }
-
-export default App;
