@@ -13,7 +13,7 @@ import { useEffect, useRef } from "react";
 import { downloadMarkdown } from "@/lib/download";
 import { Toolbar } from "./toolbar";
 
-const STORAGE_KEY = "markdown-party-content";
+const STORAGE_KEY_PREFIX = "markdown-party-content";
 const AUTO_SAVE_INTERVAL = 10_000;
 
 const DEFAULT_CONTENT = `# Welcome to markdown.party
@@ -43,18 +43,42 @@ Start typing your markdown here. This editor supports **GitHub Flavored Markdown
 Happy writing!
 `;
 
-function getInitialContent(): string {
-  const saved = localStorage.getItem(STORAGE_KEY);
+function getStorageKey(): string {
+  const url = new URL(window.location.href);
+  const existing = url.searchParams.get("doc");
+
+  if (existing) {
+    return `${STORAGE_KEY_PREFIX}:${existing}`;
+  }
+
+  const docId = crypto.randomUUID();
+  url.searchParams.set("doc", docId);
+  window.history.replaceState(null, "", url);
+  return `${STORAGE_KEY_PREFIX}:${docId}`;
+}
+
+function getInitialContent(storageKey: string): string {
+  const saved = localStorage.getItem(storageKey);
   return saved ?? DEFAULT_CONTENT;
 }
 
-function saveToLocalStorage(editor: TiptapEditor) {
+function saveToLocalStorage(editor: TiptapEditor, storageKey: string) {
   const markdown = editor.getMarkdown();
-  localStorage.setItem(STORAGE_KEY, markdown);
+  localStorage.setItem(storageKey, markdown);
+}
+
+function ensureStorageKey(
+  storageKeyRef: React.MutableRefObject<string | null>
+): string {
+  if (!storageKeyRef.current) {
+    storageKeyRef.current = getStorageKey();
+  }
+  return storageKeyRef.current;
 }
 
 export function Editor() {
   const isDirtyRef = useRef(false);
+  const storageKeyRef = useRef<string | null>(null);
 
   const editor = useEditor({
     extensions: [
@@ -76,10 +100,13 @@ export function Editor() {
     ],
     immediatelyRender: false,
     onCreate: ({ editor: e }) => {
+      const storageKey = ensureStorageKey(storageKeyRef);
       try {
-        e.commands.setContent(getInitialContent(), { contentType: "markdown" });
+        e.commands.setContent(getInitialContent(storageKey), {
+          contentType: "markdown",
+        });
       } catch {
-        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(storageKey);
         e.commands.setContent(DEFAULT_CONTENT, { contentType: "markdown" });
       }
     },
@@ -98,7 +125,7 @@ export function Editor() {
       if (!isDirtyRef.current) {
         return;
       }
-      saveToLocalStorage(editor);
+      saveToLocalStorage(editor, ensureStorageKey(storageKeyRef));
       isDirtyRef.current = false;
     }, AUTO_SAVE_INTERVAL);
 
@@ -113,7 +140,7 @@ export function Editor() {
 
     const onBeforeUnload = () => {
       if (isDirtyRef.current) {
-        saveToLocalStorage(editor);
+        saveToLocalStorage(editor, ensureStorageKey(storageKeyRef));
         isDirtyRef.current = false;
       }
     };
