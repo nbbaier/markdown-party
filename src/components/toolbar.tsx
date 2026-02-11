@@ -37,6 +37,7 @@ function ToolbarButton({
 }) {
   return (
     <button
+      aria-pressed={isActive}
       className={`rounded p-1.5 transition-colors ${
         isActive
           ? "bg-gray-200 text-gray-900"

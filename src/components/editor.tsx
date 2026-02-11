@@ -109,7 +109,12 @@ export default function Editor() {
       return;
     }
 
-    const onBeforeUnload = () => saveToLocalStorage(editor);
+    const onBeforeUnload = () => {
+      if (isDirtyRef.current) {
+        saveToLocalStorage(editor);
+        isDirtyRef.current = false;
+      }
+    };
     window.addEventListener("beforeunload", onBeforeUnload);
     return () => window.removeEventListener("beforeunload", onBeforeUnload);
   }, [editor]);
