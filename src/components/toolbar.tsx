@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import LinkDialog from "@/components/link-dialog";
+import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Toggle } from "@/components/ui/toggle";
 import {
@@ -70,9 +71,9 @@ function ToolbarButton({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <Toggle onPressedChange={onClick} pressed={false} size="sm">
+        <Button onClick={onClick} size="sm" type="button" variant="ghost">
           {children}
-        </Toggle>
+        </Button>
       </TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>

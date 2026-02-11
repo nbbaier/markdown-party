@@ -24,7 +24,7 @@ The toolbar rewrite is well-structured overall. The component decomposition is c
 
 ## P1 — Critical (Blocks Merge)
 
-### 1. `Toggle` misused for non-toggle action buttons — wrong `aria-pressed` semantics
+### 1. ~~`Toggle` misused for non-toggle action buttons — wrong `aria-pressed` semantics~~ (RESOLVED in `a59042f`)
 
 **File:** `src/components/toolbar.tsx:61-80`
 **Flagged by:** All 6 agents
