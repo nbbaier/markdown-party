@@ -125,11 +125,7 @@ export default function Toolbar({ editor }: ToolbarProps) {
   };
 
   const handleDownload = () => {
-    try {
-      downloadMarkdown(editor);
-    } catch {
-      toast.error("Failed to export markdown");
-    }
+    downloadMarkdown(editor);
   };
 
   return (

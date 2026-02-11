@@ -10,14 +10,13 @@ import type { Editor as TiptapEditor } from "@tiptap/react";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
-import { toast } from "sonner";
 import { downloadMarkdown } from "@/lib/download";
 import Toolbar from "./toolbar";
 
 const STORAGE_KEY = "markdown-party-content";
 const AUTO_SAVE_INTERVAL = 10_000;
 
-const defaultContent = `# Welcome to markdown.party
+const DEFAULT_CONTENT = `# Welcome to markdown.party
 
 Start typing your markdown here. This editor supports **GitHub Flavored Markdown** including:
 
@@ -46,7 +45,7 @@ Happy writing!
 
 function getInitialContent(): string {
   const saved = localStorage.getItem(STORAGE_KEY);
-  return saved ?? defaultContent;
+  return saved ?? DEFAULT_CONTENT;
 }
 
 function saveToLocalStorage(editor: TiptapEditor) {
@@ -78,7 +77,7 @@ export default function Editor() {
         e.commands.setContent(getInitialContent(), { contentType: "markdown" });
       } catch {
         localStorage.removeItem(STORAGE_KEY);
-        e.commands.setContent(defaultContent, { contentType: "markdown" });
+        e.commands.setContent(DEFAULT_CONTENT, { contentType: "markdown" });
       }
     },
     onUpdate: () => {
@@ -125,11 +124,7 @@ export default function Editor() {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault();
         if (editor) {
-          try {
-            downloadMarkdown(editor);
-          } catch {
-            toast.error("Failed to export markdown");
-          }
+          downloadMarkdown(editor);
         }
       }
     }
