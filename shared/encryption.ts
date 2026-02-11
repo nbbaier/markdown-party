@@ -1,3 +1,5 @@
+import { base64UrlDecode, base64UrlEncode } from "./base64url";
+
 export interface EncryptionKey {
   version: number;
   rawKey: string;
@@ -15,30 +17,23 @@ export interface EncryptedBlob {
 }
 
 const ENCRYPTED_BLOB_REGEX = /^v(\d+):(.+):(.+)$/;
+const keyCache = new Map<string, CryptoKey>();
 
-function base64UrlEncode(buffer: ArrayBuffer | Uint8Array): string {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  const base64 = btoa(String.fromCharCode(...bytes));
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-
-function base64UrlDecode(base64url: string): Uint8Array {
-  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const padded = base64 + padding;
-  const binary = atob(padded);
-  return new Uint8Array([...binary].map((c) => c.charCodeAt(0)));
-}
-
-function importAesKey(base64Key: string): Promise<CryptoKey> {
+async function importAesKey(base64Key: string): Promise<CryptoKey> {
+  const cached = keyCache.get(base64Key);
+  if (cached) {
+    return cached;
+  }
   const keyData = base64UrlDecode(base64Key);
-  return crypto.subtle.importKey(
+  const key = await crypto.subtle.importKey(
     "raw",
     keyData.buffer as ArrayBuffer,
     { name: "AES-GCM" },
     false,
     ["encrypt", "decrypt"]
   );
+  keyCache.set(base64Key, key);
+  return key;
 }
 
 function findKey(

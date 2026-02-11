@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { getCookie, setCookie } from "hono/cookie";
+import { base64UrlEncode } from "../../shared/base64url";
 import { encrypt } from "../../shared/encryption";
 import { signJwt, verifyJwt } from "../../shared/jwt";
 import { generateCsrfToken, setCsrfCookie } from "../shared/csrf";
@@ -35,11 +36,6 @@ async function generateCodeChallenge(verifier: string): Promise<string> {
   const data = encoder.encode(verifier);
   const hash = await crypto.subtle.digest("SHA-256", data);
   return base64UrlEncode(new Uint8Array(hash));
-}
-
-function base64UrlEncode(buffer: Uint8Array): string {
-  const base64 = btoa(String.fromCharCode(...buffer));
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
 function isValidGitHubLogin(login: string): boolean {

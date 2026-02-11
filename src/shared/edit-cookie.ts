@@ -1,3 +1,5 @@
+import { base64UrlDecode, base64UrlEncode } from "../../shared/base64url";
+
 export const EDIT_COOKIE_NAME = "mp_edit_cap";
 export const EDIT_COOKIE_TTL = 86_400;
 
@@ -36,29 +38,23 @@ export function buildEditCookieAttributes(
   };
 }
 
-function base64UrlEncode(buffer: ArrayBuffer | Uint8Array): string {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  const base64 = btoa(String.fromCharCode(...bytes));
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
+const hmacKeyCache = new Map<string, CryptoKey>();
 
-function base64UrlDecode(base64url: string): Uint8Array {
-  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const padded = base64 + padding;
-  const binary = atob(padded);
-  return new Uint8Array([...binary].map((c) => c.charCodeAt(0)));
-}
-
-function importHmacKey(secret: string): Promise<CryptoKey> {
+async function importHmacKey(secret: string): Promise<CryptoKey> {
+  const cached = hmacKeyCache.get(secret);
+  if (cached) {
+    return cached;
+  }
   const encoder = new TextEncoder();
-  return crypto.subtle.importKey(
+  const key = await crypto.subtle.importKey(
     "raw",
     encoder.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"]
   );
+  hmacKeyCache.set(secret, key);
+  return key;
 }
 
 export async function signEditCookie(

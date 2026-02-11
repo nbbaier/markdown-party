@@ -1,3 +1,5 @@
+import { base64UrlDecode, base64UrlEncode } from "./base64url";
+
 export interface JwtPayload {
   userId: string;
   login: string;
@@ -18,30 +20,24 @@ export interface JwtOptions {
   issuer: string;
 }
 
-function base64UrlEncode(buffer: ArrayBuffer | Uint8Array): string {
-  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
-  const base64 = btoa(String.fromCharCode(...bytes));
-  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
+const keyCache = new Map<string, CryptoKey>();
 
-function base64UrlDecode(base64url: string): Uint8Array {
-  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
-  const padding = "=".repeat((4 - (base64.length % 4)) % 4);
-  const padded = base64 + padding;
-  const binary = atob(padded);
-  return new Uint8Array([...binary].map((c) => c.charCodeAt(0)));
-}
-
-function importKey(secret: string): Promise<CryptoKey> {
+async function importKey(secret: string): Promise<CryptoKey> {
+  const cached = keyCache.get(secret);
+  if (cached) {
+    return cached;
+  }
   const encoder = new TextEncoder();
   const keyData = encoder.encode(secret);
-  return crypto.subtle.importKey(
+  const key = await crypto.subtle.importKey(
     "raw",
     keyData,
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"]
   );
+  keyCache.set(secret, key);
+  return key;
 }
 
 export async function signJwt(

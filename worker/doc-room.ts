@@ -56,8 +56,10 @@ export class DocRoom extends YServer<WorkerBindings> {
     string,
     { canEdit: boolean; isOwner: boolean }
   >();
+  private readonly liveConnections = new Map<string, Connection>();
 
   private meta: DocRoomMeta | null = null;
+  private ownerConnectionId: string | null = null;
 
   // ============================================================================
   // Lifecycle Methods
@@ -71,6 +73,8 @@ export class DocRoom extends YServer<WorkerBindings> {
   async onLoad(): Promise<void> {
     this.pendingMarkdownRequests.clear();
     this.connectionCapabilities.clear();
+    this.liveConnections.clear();
+    this.ownerConnectionId = null;
     this.meta = null;
 
     this.ensureSchema();
@@ -85,8 +89,7 @@ export class DocRoom extends YServer<WorkerBindings> {
   }
 
   async alarm(): Promise<void> {
-    const connections = Array.from(this.getConnections());
-    if (connections.length > 0) {
+    if (this.liveConnections.size > 0) {
       await this.scheduleTtlAlarm();
       return;
     }
@@ -153,14 +156,22 @@ export class DocRoom extends YServer<WorkerBindings> {
   }
 
   private findOwnerConnection(): Connection | null {
+    if (this.ownerConnectionId) {
+      const ownerConnection = this.liveConnections.get(this.ownerConnectionId);
+      if (ownerConnection) {
+        return ownerConnection;
+      }
+      this.ownerConnectionId = null;
+    }
+
     for (const [connectionId, caps] of this.connectionCapabilities.entries()) {
-      if (caps.isOwner) {
-        const connection = Array.from(this.getConnections()).find(
-          (c) => c.id === connectionId
-        );
-        if (connection) {
-          return connection;
-        }
+      if (!caps.isOwner) {
+        continue;
+      }
+      const connection = this.liveConnections.get(connectionId);
+      if (connection) {
+        this.ownerConnectionId = connectionId;
+        return connection;
       }
     }
     return null;
@@ -325,30 +336,18 @@ export class DocRoom extends YServer<WorkerBindings> {
   private handleSyncError(status: number): void {
     const isRetryable = status === 403 || status === 429 || status >= 500;
 
-    if (!isRetryable || this.syncBackoffAttempt >= 5) {
+    if (!isRetryable) {
       this.broadcastSyncStatus("error-retrying", `GitHub error: ${status}`);
       return;
     }
-
-    this.syncBackoffAttempt++;
-    const delay = Math.min(30_000, 2 ** this.syncBackoffAttempt * 1000);
-    const nextRetryAt = Date.now() + delay;
-
-    this.broadcastMessage({
-      type: "error-retrying",
-      payload: { attempt: this.syncBackoffAttempt, nextRetryAt },
-    });
-
-    if (this.syncBackoffTimer) {
-      clearTimeout(this.syncBackoffTimer);
-    }
-    this.syncBackoffTimer = setTimeout(() => {
-      this.syncToGitHub();
-    }, delay);
+    this.scheduleRetry(status);
   }
 
-  private scheduleRetry(): void {
+  private scheduleRetry(status?: number): void {
     if (this.syncBackoffAttempt >= 5) {
+      if (status !== undefined) {
+        this.broadcastSyncStatus("error-retrying", `GitHub error: ${status}`);
+      }
       return;
     }
 
@@ -387,7 +386,7 @@ export class DocRoom extends YServer<WorkerBindings> {
     connection: Connection,
     ctx: ConnectionContext
   ): Promise<void> {
-    const currentConnections = Array.from(this.getConnections()).length;
+    const currentConnections = this.liveConnections.size;
     if (currentConnections >= DocRoom.MAX_CONNECTIONS) {
       connection.close(4005, "Room is at capacity");
       return;
@@ -403,7 +402,11 @@ export class DocRoom extends YServer<WorkerBindings> {
       this.checkEditCapability(ctx),
       this.checkOwner(ctx),
     ]);
+    this.liveConnections.set(connection.id, connection);
     this.connectionCapabilities.set(connection.id, { canEdit, isOwner });
+    if (isOwner) {
+      this.ownerConnectionId = connection.id;
+    }
 
     // Update activity on edit connection
     if (canEdit) {
@@ -418,17 +421,16 @@ export class DocRoom extends YServer<WorkerBindings> {
     _reason: string,
     _wasClean: boolean
   ): Promise<void> {
+    this.liveConnections.delete(connection.id);
     this.connectionCapabilities.delete(connection.id);
+    if (this.ownerConnectionId === connection.id) {
+      this.ownerConnectionId = null;
+    }
 
     // Schedule TTL check when last connection leaves for anonymous docs
     const meta = this.getMeta();
-    if (meta && !meta.ownerUserId) {
-      const connections = Array.from(this.getConnections()).filter(
-        (c) => c.id !== connection.id
-      );
-      if (connections.length === 0) {
-        await this.scheduleTtlAlarm();
-      }
+    if (meta && !meta.ownerUserId && this.liveConnections.size === 0) {
+      await this.scheduleTtlAlarm();
     }
   }
 
