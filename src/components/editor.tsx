@@ -1,18 +1,18 @@
-import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
+import Link from "@tiptap/extension-link";
 import { Table } from "@tiptap/extension-table";
-import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
-import TaskList from "@tiptap/extension-task-list";
+import TableRow from "@tiptap/extension-table-row";
 import TaskItem from "@tiptap/extension-task-item";
-import Link from "@tiptap/extension-link";
+import TaskList from "@tiptap/extension-task-list";
 import { Markdown } from "@tiptap/markdown";
+import type { Editor as TiptapEditor } from "@tiptap/react";
+import { EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
 import { toast } from "sonner";
-import type { Editor as TiptapEditor } from "@tiptap/react";
-import Toolbar from "./Toolbar";
 import { downloadMarkdown } from "@/lib/download";
+import Toolbar from "./toolbar";
 
 const STORAGE_KEY = "markdown-party-content";
 const AUTO_SAVE_INTERVAL = 10_000;
@@ -88,10 +88,14 @@ export default function Editor() {
 
   // Auto-save interval
   useEffect(() => {
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
 
     const id = setInterval(() => {
-      if (!isDirtyRef.current) return;
+      if (!isDirtyRef.current) {
+        return;
+      }
       saveToLocalStorage(editor);
       isDirtyRef.current = false;
     }, AUTO_SAVE_INTERVAL);
@@ -101,7 +105,9 @@ export default function Editor() {
 
   // Save on beforeunload
   useEffect(() => {
-    if (!editor) return;
+    if (!editor) {
+      return;
+    }
 
     const onBeforeUnload = () => saveToLocalStorage(editor);
     window.addEventListener("beforeunload", onBeforeUnload);
@@ -126,7 +132,9 @@ export default function Editor() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [editor]);
 
-  if (!editor) return null;
+  if (!editor) {
+    return null;
+  }
 
   return (
     <div className="flex h-screen flex-col">

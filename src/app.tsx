@@ -1,5 +1,5 @@
-import Editor from "./components/Editor";
 import { Toaster } from "@/components/ui/sonner";
+import Editor from "./components/editor";
 
 export default function App() {
   return (
