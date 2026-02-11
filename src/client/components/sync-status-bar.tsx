@@ -40,7 +40,11 @@ export function SyncStatusBar({
       : "";
 
   return (
-    <output aria-live="polite" className={`sync-status-bar ${cssClass}`}>
+    <output
+      aria-live="polite"
+      className={`sync-status-bar ${cssClass}`}
+      style={{ padding: "8px 16px" }}
+    >
       {label}
       {retryInfo}
     </output>
