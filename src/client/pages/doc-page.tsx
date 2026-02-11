@@ -1,12 +1,20 @@
 import { MilkdownProvider } from "@milkdown/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
+import type { DocMetadataResponse } from "../../shared/doc-meta";
+import {
+  MessageTypeDiscardLocal,
+  MessageTypePushLocal,
+} from "../../shared/messages";
+import { ConflictModal } from "../components/conflict-modal";
 import type { EditorHandle } from "../components/editor";
 import { Editor } from "../components/editor";
+import { SyncStatusBar } from "../components/sync-status-bar";
 import { useAuth } from "../contexts/auth-context";
 import { useCollabProvider } from "../hooks/use-collab-provider";
 import { useEditToken } from "../hooks/use-edit-token";
 import { useMarkdownProtocol } from "../hooks/use-markdown-protocol";
+import { useSyncStatus } from "../hooks/use-sync-status";
 import "./doc-page.css";
 
 type ViewState = "loading" | "not-found" | "editor" | "viewer";
@@ -61,9 +69,29 @@ function EditorView({
     getMarkdown,
     onReloadRemote: handleReloadRemote,
   });
+  const { status, send, dismissConflict } = useSyncStatus({
+    provider,
+    getMarkdown,
+  });
+
+  const handlePushLocal = useCallback(() => {
+    send({ type: MessageTypePushLocal, payload: {} });
+    dismissConflict();
+  }, [send, dismissConflict]);
+
+  const handleDiscardLocal = useCallback(() => {
+    send({ type: MessageTypeDiscardLocal, payload: {} });
+    dismissConflict();
+  }, [send, dismissConflict]);
 
   return (
     <div className="doc-editor">
+      <SyncStatusBar
+        connectionState={connectionState}
+        nextRetryAt={status.nextRetryAt}
+        retryAttempt={status.retryAttempt}
+        syncState={status.syncState}
+      />
       <div className="editor-wrapper">
         {doc ? (
           <MilkdownProvider>
@@ -88,6 +116,16 @@ function EditorView({
           </div>
         )}
       </div>
+      {status.syncState === "conflict" &&
+      status.localMarkdown !== undefined &&
+      status.remoteMarkdown !== undefined ? (
+        <ConflictModal
+          localMarkdown={status.localMarkdown}
+          onDiscardLocal={handleDiscardLocal}
+          onPushLocal={handlePushLocal}
+          remoteMarkdown={status.remoteMarkdown}
+        />
+      ) : null}
     </div>
   );
 }
@@ -165,8 +203,12 @@ export function DocPage() {
           return;
         }
 
-        await metaRes.json();
+        const meta = (await metaRes.json()) as DocMetadataResponse;
         if (cancelled) {
+          return;
+        }
+        if (!meta.initialized) {
+          setView("not-found");
           return;
         }
 

@@ -104,8 +104,8 @@ function EditorComponent(
 
     const ctx = editor.ctx;
     let cancelled = false;
-
-    ctx.wait(CollabReady).then(() => {
+    async function bindCollab() {
+      await ctx.wait(CollabReady);
       if (cancelled) {
         return;
       }
@@ -115,7 +115,8 @@ function EditorComponent(
         collabService.setAwareness(awareness);
       }
       collabService.connect();
-    });
+    }
+    bindCollab();
 
     return () => {
       cancelled = true;

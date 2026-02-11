@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { ClaimEditResponse } from "../../shared/doc-meta";
 import { fetchWithCsrf } from "../lib/fetch-with-csrf";
 
 const EDIT_HASH_REGEX = /^#edit=.+$/;
@@ -42,7 +43,8 @@ export function useEditToken(docId: string | undefined): UseEditTokenResult {
           credentials: "same-origin",
         });
         if (res.ok) {
-          setHasEditCapability(true);
+          const body = (await res.json()) as ClaimEditResponse;
+          setHasEditCapability(body.ok);
         }
       } catch {
         setHasEditCapability(false);
@@ -54,7 +56,6 @@ export function useEditToken(docId: string | undefined): UseEditTokenResult {
       );
       setClaiming(false);
     }
-
     claimToken();
   }, [docId]);
 

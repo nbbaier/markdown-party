@@ -4,6 +4,7 @@ import { HeaderBar } from "./client/components/header-bar";
 import { AuthProvider } from "./client/contexts/auth-context";
 import { fetchWithCsrf } from "./client/lib/fetch-with-csrf";
 import { DocPage } from "./client/pages/doc-page";
+import type { CreateDocResponse } from "./shared/doc-meta";
 import "./index.css";
 
 // DocCreator: Creates a new doc on mount and redirects
@@ -26,10 +27,7 @@ function DocCreator() {
           throw new Error("Failed to create document");
         }
 
-        const data = (await res.json()) as {
-          doc_id: string;
-          edit_token: string;
-        };
+        const data = (await res.json()) as CreateDocResponse;
 
         if (!cancelled) {
           sessionStorage.setItem(`edit_token:${data.doc_id}`, data.edit_token);
