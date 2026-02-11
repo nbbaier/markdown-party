@@ -96,6 +96,7 @@ function EditorComponent(
     if (loading || !doc) {
       return;
     }
+    const currentDoc = doc;
 
     const editor = getInstance();
     if (!editor) {
@@ -110,7 +111,7 @@ function EditorComponent(
         return;
       }
       const collabService = ctx.get(collabServiceCtx);
-      collabService.bindDoc(doc);
+      collabService.bindDoc(currentDoc);
       if (awareness) {
         collabService.setAwareness(awareness);
       }
