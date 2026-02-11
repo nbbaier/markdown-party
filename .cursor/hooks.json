@@ -1,10 +1,4 @@
 {
   "version": 1,
-  "hooks": {
-    "afterFileEdit": [
-      {
-        "command": "bun x ultracite fix"
-      }
-    ]
-  }
+  "hooks": { "afterFileEdit": [{ "command": "bun x ultracite fix" }] }
 }
