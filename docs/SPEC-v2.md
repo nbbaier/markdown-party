@@ -73,12 +73,12 @@ Reuses the capability-based edit token model from v1:
 4. Creator can revoke edit tokens and generate new ones
 5. For anonymous docs: the creator's browser holds the edit capability via cookie — if they clear cookies, they lose edit access to their own anonymous doc
 
-| User                        | Can view | Can edit | Persists to GitHub |
-| --------------------------- | -------- | -------- | ------------------ |
-| Creator (anonymous)         | Yes      | Yes      | No                 |
-| Creator (signed in)         | Yes      | Yes      | Yes (their token)  |
-| Anyone with edit link       | Yes      | Yes      | Via creator's token|
-| Anyone with view link       | Yes      | No       | N/A                |
+| User                  | Can view | Can edit | Persists to GitHub  |
+| --------------------- | -------- | -------- | ------------------- |
+| Creator (anonymous)   | Yes      | Yes      | No                  |
+| Creator (signed in)   | Yes      | Yes      | Yes (their token)   |
+| Anyone with edit link | Yes      | Yes      | Via creator's token |
+| Anyone with view link | Yes      | No       | N/A                 |
 
 ### Viewing / Raw Access
 
@@ -114,12 +114,14 @@ Reuses the capability-based edit token model from v1:
 Each document gets its own Durable Object. The DO is identified by gist.party's own `doc_id`, not a GitHub ID.
 
 **Key changes from v1:**
+
 - Room identity is a random `doc_id`, not a `gist_id`
 - GitHub sync is optional — the DO works fully without it
 - Ephemeral docs (no owner) have a 24-hour TTL enforced via DO alarm
 - The `initialized` flag is set on creation, not on GitHub import
 
 **Behavior:**
+
 - **`onLoad()`**: Loads Yjs snapshot from DO SQLite. If no snapshot, starts with an empty document (no `needs-init` dance for anonymous docs).
 - **`onSave()`**: Always writes Yjs snapshot to DO SQLite. If a GitHub backend is configured and the owner is connected, syncs to GitHub (same conditional-write logic as v1). If no GitHub backend, just persists locally.
 - **TTL enforcement**: Ephemeral (unowned) docs set a DO alarm for 24 hours after last activity. On alarm, the DO deletes its storage and self-destructs. Any connected clients are disconnected. Owned docs (signed-in creator) have no auto-expiry.
@@ -128,6 +130,7 @@ Each document gets its own Durable Object. The DO is identified by gist.party's 
 - **Limits**: Same as v1 — 2 MB doc size, connection limits, rate limiting.
 
 **Storage (DO SQLite):**
+
 - `docId` — gist.party's document ID
 - `yjsSnapshot` — serialized Yjs document
 - `canonicalMarkdown` — last serialized markdown string
@@ -154,40 +157,40 @@ Same editor stack (Milkdown + Yjs + y-partyserver) but with a rethought UX:
 
 Same as v1. No changes to the underlying technology.
 
-| Component         | Technology                                     |
-| ----------------- | ---------------------------------------------- |
-| Framework         | Vite + React                                   |
-| Editor            | Milkdown (`@milkdown/core`, `@milkdown/react`) |
-| Editor presets    | `@milkdown/preset-commonmark`, `@milkdown/preset-gfm` |
-| Editor collab     | `@milkdown/plugin-collab` (wraps y-prosemirror)|
-| CRDT              | Yjs (via y-prosemirror, managed by Milkdown)   |
-| Realtime server   | PartyServer (`partyserver`) on Cloudflare DOs  |
-| Yjs integration   | `y-partyserver` (YServer + YProvider)          |
-| HTTP router       | Hono                                           |
-| Auth              | GitHub OAuth 2.0 (PKCE + state)                |
-| Session           | Signed JWT cookies                             |
-| Session store     | Workers KV                                     |
-| Token encryption  | AES-GCM via WebCrypto (versioned key)          |
-| Storage           | DO SQLite (primary), GitHub API (optional sync)|
-| Markdown render   | remark + rehype (read-only view)               |
-| Deployment        | Cloudflare Workers + Durable Objects           |
+| Component        | Technology                                            |
+| ---------------- | ----------------------------------------------------- |
+| Framework        | Vite + React                                          |
+| Editor           | Milkdown (`@milkdown/core`, `@milkdown/react`)        |
+| Editor presets   | `@milkdown/preset-commonmark`, `@milkdown/preset-gfm` |
+| Editor collab    | `@milkdown/plugin-collab` (wraps y-prosemirror)       |
+| CRDT             | Yjs (via y-prosemirror, managed by Milkdown)          |
+| Realtime server  | PartyServer (`partyserver`) on Cloudflare DOs         |
+| Yjs integration  | `y-partyserver` (YServer + YProvider)                 |
+| HTTP router      | Hono                                                  |
+| Auth             | GitHub OAuth 2.0 (PKCE + state)                       |
+| Session          | Signed JWT cookies                                    |
+| Session store    | Workers KV                                            |
+| Token encryption | AES-GCM via WebCrypto (versioned key)                 |
+| Storage          | DO SQLite (primary), GitHub API (optional sync)       |
+| Markdown render  | remark + rehype (read-only view)                      |
+| Deployment       | Cloudflare Workers + Durable Objects                  |
 
 ## API Routes
 
-| Route                              | Method | Description                                |
-| ---------------------------------- | ------ | ------------------------------------------ |
-| `/api/docs`                        | POST   | Creates a new document, returns `{ doc_id, edit_token }` |
-| `/api/docs/:doc_id/claim`          | POST   | Exchanges edit token for edit capability cookie |
-| `/api/docs/:doc_id/edit-token`     | POST   | Revokes + regenerates edit token (owner only) |
-| `/api/docs/:doc_id/github`         | POST   | Links document to a GitHub backend (Gist/repo) |
-| `/api/docs/:doc_id/github`         | DELETE | Unlinks document from GitHub backend       |
-| `/api/auth/github`                 | GET    | Initiates GitHub OAuth flow                |
-| `/api/auth/github/callback`        | GET    | OAuth callback, sets session               |
-| `/api/auth/refresh`                | POST   | Refreshes JWT cookie                       |
-| `/api/auth/logout`                 | POST   | Clears session                             |
-| `/parties/doc-room/:doc_id`        | GET    | WebSocket upgrade (via `routePartykitRequest`) |
-| `/:doc_id`                         | GET    | Editor (with edit capability) or read-only view |
-| `/:doc_id/raw`                     | GET    | Raw markdown as `text/plain`               |
+| Route                          | Method | Description                                              |
+| ------------------------------ | ------ | -------------------------------------------------------- |
+| `/api/docs`                    | POST   | Creates a new document, returns `{ doc_id, edit_token }` |
+| `/api/docs/:doc_id/claim`      | POST   | Exchanges edit token for edit capability cookie          |
+| `/api/docs/:doc_id/edit-token` | POST   | Revokes + regenerates edit token (owner only)            |
+| `/api/docs/:doc_id/github`     | POST   | Links document to a GitHub backend (Gist/repo)           |
+| `/api/docs/:doc_id/github`     | DELETE | Unlinks document from GitHub backend                     |
+| `/api/auth/github`             | GET    | Initiates GitHub OAuth flow                              |
+| `/api/auth/github/callback`    | GET    | OAuth callback, sets session                             |
+| `/api/auth/refresh`            | POST   | Refreshes JWT cookie                                     |
+| `/api/auth/logout`             | POST   | Clears session                                           |
+| `/parties/doc-room/:doc_id`    | GET    | WebSocket upgrade (via `routePartykitRequest`)           |
+| `/:doc_id`                     | GET    | Editor (with edit capability) or read-only view          |
+| `/:doc_id/raw`                 | GET    | Raw markdown as `text/plain`                             |
 
 ## Data Flow: Edit -> Save
 
@@ -211,6 +214,7 @@ Same as v1. No changes to the underlying technology.
 ## Security
 
 All security measures from v1 carry forward:
+
 - XSS-safe markdown rendering (`rehype-sanitize`, CSP)
 - Raw endpoint: `text/plain`, `nosniff`, `no-cache`
 - `Referrer-Policy: strict-origin`
@@ -254,18 +258,18 @@ All security measures from v1 carry forward:
 
 ## What Changed from v1
 
-| Aspect | v1 | v2 |
-| --- | --- | --- |
-| Core identity | Collaborative Gist editor | Collaborative markdown editor |
-| Entry point | Landing page with "New Document" + "Import Gist" | Instant editor — no landing page |
-| Account required | Yes, to do anything useful | No — anonymous editing works fully |
-| Document ID | Gist ID | gist.party's own random ID |
-| Document lifetime | Tied to Gist (permanent) | Ephemeral (24h) or persistent (signed in) |
-| GitHub role | The backend | Optional persistence layer |
-| Conflict resolution | Full UI with diff preview | Simplified (out of scope for MVP) |
-| Pending sync | 30-day retention with expiry banner | Simplified (retry on reconnect) |
-| Gist import | Primary flow | Secondary feature |
-| Landing page | Marketing page with feature cards | None — the app is the editor |
+| Aspect              | v1                                               | v2                                        |
+| ------------------- | ------------------------------------------------ | ----------------------------------------- |
+| Core identity       | Collaborative Gist editor                        | Collaborative markdown editor             |
+| Entry point         | Landing page with "New Document" + "Import Gist" | Instant editor — no landing page          |
+| Account required    | Yes, to do anything useful                       | No — anonymous editing works fully        |
+| Document ID         | Gist ID                                          | gist.party's own random ID                |
+| Document lifetime   | Tied to Gist (permanent)                         | Ephemeral (24h) or persistent (signed in) |
+| GitHub role         | The backend                                      | Optional persistence layer                |
+| Conflict resolution | Full UI with diff preview                        | Simplified (out of scope for MVP)         |
+| Pending sync        | 30-day retention with expiry banner              | Simplified (retry on reconnect)           |
+| Gist import         | Primary flow                                     | Secondary feature                         |
+| Landing page        | Marketing page with feature cards                | None — the app is the editor              |
 
 ## Open Questions
 

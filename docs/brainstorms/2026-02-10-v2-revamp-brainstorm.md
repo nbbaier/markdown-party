@@ -48,11 +48,13 @@ Rewrite the core (DocRoom DO, API routes, client UX) from scratch while porting 
 ### 4. Editor UI: Milkdown Built-In + Minimal Header
 
 **Formatting controls (in-editor, Milkdown plugins):**
+
 - `@milkdown/plugin-slash` — Type `/` for block formatting (headings, lists, code blocks, etc.)
 - `@milkdown/plugin-tooltip` — Select text for floating inline toolbar (bold, italic, link, code)
 - Keyboard shortcuts (Cmd+B, Cmd+I, etc.) work naturally
 
 **App actions (header bar):**
+
 - Thin top bar: app name/logo on left, action icons on right
 - Actions: Share (copy link), Export/Download (.md), Save to GitHub (signed in), Sign In (anonymous)
 - GitHub features (save, sync status) only appear when signed in
@@ -60,18 +62,21 @@ Rewrite the core (DocRoom DO, API routes, client UX) from scratch while porting 
 ### 5. GitHub Persistence: Save to Gist or Repo
 
 **In MVP:**
+
 - Signed-in users can "Save to GitHub" → choose Gist (public/secret) or repo file
 - Creates a link between the doc and the GitHub backend
 - Subsequent edits auto-sync (debounced, conditional writes)
 - Sync status visible in header (Saved / Saving / Error)
 
 **Import:**
+
 - "Import from URL" — paste any URL to a raw markdown file (Gist raw URL, GitHub raw URL, any public .md URL)
 - Content is fetched and loaded into the current doc
 - One-time copy, no ongoing sync from the source URL
 - Works for all users (anonymous and signed in)
 
 **Deferred:**
+
 - Two-way import from existing Gist (link for ongoing sync) — post-MVP
 
 ### 6. Document Identity & Lifecycle

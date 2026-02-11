@@ -1,12 +1,13 @@
 import { Hono } from "hono";
 import { joyful } from "joyful";
+import { decrypt } from "../../shared/encryption";
+import { verifyJwt } from "../../shared/jwt";
 import {
   buildEditCookieAttributes,
   EDIT_COOKIE_TTL,
   signEditCookie,
 } from "../../src/shared/edit-cookie";
 import { authMiddleware } from "../shared/auth-middleware";
-import { decrypt } from "../shared/encryption";
 
 interface Env {
   Bindings: {
@@ -83,17 +84,30 @@ const docRoutes = new Hono<Env>();
 
 // POST /api/docs - Create a new document (no auth required)
 docRoutes.post("/", async (c) => {
-  const docId = generateDocId();
+  const MAX_ID_RETRIES = 3;
+  let docId = "";
+
+  for (let attempt = 0; attempt < MAX_ID_RETRIES; attempt++) {
+    docId = generateDocId();
+    const stub = c.env.DOC_ROOM.get(c.env.DOC_ROOM.idFromName(docId));
+    const metaRes = await stub.fetch(createDoRequest(docId, "/meta"));
+    const meta = (await metaRes.json()) as DocMeta;
+    if (!meta.initialized) {
+      break;
+    }
+    if (attempt === MAX_ID_RETRIES - 1) {
+      return c.json({ error: "Failed to generate unique document ID" }, 503);
+    }
+  }
+
   const { token: editToken, hash: editTokenHash } = await generateEditToken();
 
-  // Get owner user ID if authenticated
   let ownerUserId: string | undefined;
   const sessionCookie = c.req
     .header("cookie")
     ?.match(SESSION_COOKIE_REGEX)?.[1];
   if (sessionCookie) {
     try {
-      const { verifyJwt } = await import("../../src/shared/jwt");
       const claims = await verifyJwt(sessionCookie, {
         secret: c.env.JWT_SECRET,
         expiresInSeconds: 3600,

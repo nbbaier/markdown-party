@@ -68,13 +68,10 @@ export class DocRoom extends YServer<WorkerEnv> {
 
   // biome-ignore lint/suspicious/useAwait: Called by framework
   async onStart(): Promise<void> {
-    console.log(`[DocRoom ${this.name}] Server started`);
     this.ensureSchema();
   }
 
   async onLoad(): Promise<void> {
-    console.log(`[DocRoom ${this.name}] Loading...`);
-
     this.pendingMarkdownRequests.clear();
     this.connectionCapabilities.clear();
     this.meta = null;
@@ -84,7 +81,6 @@ export class DocRoom extends YServer<WorkerEnv> {
 
     const snapshot = this.loadSnapshot();
     if (snapshot) {
-      console.log(`[DocRoom ${this.name}] Restored from snapshot`);
       Y.applyUpdate(this.document, snapshot.data);
     }
 
@@ -92,36 +88,27 @@ export class DocRoom extends YServer<WorkerEnv> {
   }
 
   async alarm(): Promise<void> {
-    console.log(`[DocRoom ${this.name}] Alarm fired`);
-
     const connections = Array.from(this.getConnections());
     if (connections.length > 0) {
-      console.log(
-        `[DocRoom ${this.name}] Active connections exist, rescheduling alarm`
-      );
       await this.scheduleTtlAlarm();
       return;
     }
 
     const meta = this.getMeta();
     if (!meta) {
-      console.log(`[DocRoom ${this.name}] No metadata, destroying`);
       await this.ctx.storage.deleteAll();
       return;
     }
 
-    // Anonymous docs with no activity get destroyed
     if (!meta.ownerUserId) {
       const lastActivity = new Date(meta.lastActivityAt).getTime();
       const now = Date.now();
       if (now - lastActivity >= ANONYMOUS_TTL_MS) {
-        console.log(`[DocRoom ${this.name}] Anonymous doc expired, destroying`);
         await this.ctx.storage.deleteAll();
         return;
       }
     }
 
-    // Reschedule alarm for anonymous docs
     if (!meta.ownerUserId) {
       await this.scheduleTtlAlarm();
     }
@@ -131,8 +118,6 @@ export class DocRoom extends YServer<WorkerEnv> {
   private syncBackoffTimer: ReturnType<typeof setTimeout> | null = null;
 
   async onSave(): Promise<void> {
-    console.log(`[DocRoom ${this.name}] Saving snapshot...`);
-
     const snapshot = Y.encodeStateAsUpdate(this.document);
     this.saveSnapshot(snapshot);
 
@@ -163,9 +148,6 @@ export class DocRoom extends YServer<WorkerEnv> {
     // Request canonical markdown from owner
     const markdown = await this.requestCanonicalMarkdown(ownerConnection);
     if (!markdown) {
-      console.log(
-        `[DocRoom ${this.name}] No markdown received from owner, skipping GitHub sync`
-      );
       return;
     }
 
@@ -224,14 +206,8 @@ export class DocRoom extends YServer<WorkerEnv> {
       return;
     }
 
-    const backend = JSON.parse(meta.githubBackend) as {
-      type: "gist";
-      gistId: string;
-      filename: string;
-      etag: string | null;
-    };
-
-    if (backend.type !== "gist") {
+    const backend = this.parseGitHubBackend(meta.githubBackend);
+    if (!backend || backend.type !== "gist") {
       return;
     }
 
@@ -289,9 +265,7 @@ export class DocRoom extends YServer<WorkerEnv> {
       this.setMeta(meta);
 
       this.broadcastSyncStatus("saved");
-      console.log(`[DocRoom ${this.name}] GitHub sync successful`);
-    } catch (error) {
-      console.error(`[DocRoom ${this.name}] GitHub sync error:`, error);
+    } catch {
       await this.scheduleRetry();
     }
   }
@@ -309,11 +283,13 @@ export class DocRoom extends YServer<WorkerEnv> {
       return null;
     }
 
-    const { encryptedToken } = JSON.parse(sessionData) as {
-      encryptedToken: string;
-    };
+    const parsedSession = this.parseSessionData(sessionData);
+    if (!parsedSession) {
+      this.broadcastSyncStatus("pending-sync", "Invalid session data");
+      return null;
+    }
     const { decrypt } = await import("./shared/encryption");
-    return decrypt(encryptedToken, {
+    return decrypt(parsedSession.encryptedToken, {
       currentKey: { version: 1, rawKey: this.env.ENCRYPTION_KEY_V1 },
       previousKeys: [],
     });
@@ -323,8 +299,6 @@ export class DocRoom extends YServer<WorkerEnv> {
     backend: { type: "gist"; gistId: string; filename: string },
     accessToken: string
   ): Promise<void> {
-    console.log(`[DocRoom ${this.name}] GitHub 412 - remote changed`);
-
     const remoteRes = await fetch(
       `https://api.github.com/gists/${backend.gistId}`,
       {
@@ -337,9 +311,10 @@ export class DocRoom extends YServer<WorkerEnv> {
     );
 
     if (remoteRes.ok) {
-      const remoteData = (await remoteRes.json()) as {
-        files: Record<string, { content: string }>;
-      };
+      const remoteData = await this.parseGistResponse(remoteRes);
+      if (!remoteData) {
+        return;
+      }
       const remoteMarkdown = remoteData.files[backend.filename]?.content ?? "";
 
       this.broadcastMessage({
@@ -355,9 +330,6 @@ export class DocRoom extends YServer<WorkerEnv> {
     const isRetryable = status === 403 || status === 429 || status >= 500;
 
     if (!isRetryable || this.syncBackoffAttempt >= 5) {
-      console.log(
-        `[DocRoom ${this.name}] GitHub sync failed permanently: ${status}`
-      );
       this.broadcastSyncStatus("error-retrying", `GitHub error: ${status}`);
       return;
     }
@@ -365,10 +337,6 @@ export class DocRoom extends YServer<WorkerEnv> {
     this.syncBackoffAttempt++;
     const delay = Math.min(30_000, 2 ** this.syncBackoffAttempt * 1000);
     const nextRetryAt = Date.now() + delay;
-
-    console.log(
-      `[DocRoom ${this.name}] GitHub sync failed (${status}), retrying in ${delay}ms (attempt ${this.syncBackoffAttempt})`
-    );
 
     this.broadcastMessage({
       type: "error-retrying",
@@ -425,25 +393,15 @@ export class DocRoom extends YServer<WorkerEnv> {
   ): Promise<void> {
     const currentConnections = Array.from(this.getConnections()).length;
     if (currentConnections >= DocRoom.MAX_CONNECTIONS) {
-      console.log(
-        `[DocRoom ${this.name}] Rejecting connection - max connections (${DocRoom.MAX_CONNECTIONS}) reached`
-      );
       connection.close(4005, "Room is at capacity");
       return;
     }
 
     const meta = this.getMeta();
     if (!meta?.initialized) {
-      console.log(
-        `[DocRoom ${this.name}] Rejecting connection - not initialized`
-      );
       connection.close(4004, "Room not initialized");
       return;
     }
-
-    console.log(
-      `[DocRoom ${this.name}] Connection ${connection.id} joined (${currentConnections + 1}/${DocRoom.MAX_CONNECTIONS})`
-    );
 
     const [canEdit, isOwner] = await Promise.all([
       this.checkEditCapability(ctx),
@@ -460,14 +418,10 @@ export class DocRoom extends YServer<WorkerEnv> {
 
   async onClose(
     connection: Connection,
-    code: number,
-    reason: string,
+    _code: number,
+    _reason: string,
     _wasClean: boolean
   ): Promise<void> {
-    console.log(
-      `[DocRoom ${this.name}] Connection ${connection.id} left (code: ${code}, reason: ${reason})`
-    );
-
     this.connectionCapabilities.delete(connection.id);
 
     // Schedule TTL check when last connection leaves for anonymous docs
@@ -492,9 +446,6 @@ export class DocRoom extends YServer<WorkerEnv> {
         : message.byteLength;
 
     if (messageBytes > DocRoom.MAX_MESSAGE_SIZE) {
-      console.log(
-        `[DocRoom ${this.name}] Message from ${connection.id} exceeds size limit (${messageBytes} > ${DocRoom.MAX_MESSAGE_SIZE})`
-      );
       connection.close(4009, "Message too large");
       return;
     }
@@ -535,8 +486,14 @@ export class DocRoom extends YServer<WorkerEnv> {
             break;
           }
         }
-      } catch {
-        // Not a custom message or invalid - ignore
+      } catch (error) {
+        // Broadcast error to client so UI can react
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
+        this.broadcastSyncStatus(
+          "error-retrying",
+          `Message processing failed: ${errorMessage}`
+        );
       }
     }
   }
@@ -605,11 +562,13 @@ export class DocRoom extends YServer<WorkerEnv> {
   }
 
   private async handleInitializeRequest(req: Request): Promise<Response> {
-    const body = (await req.json()) as {
-      docId: string;
-      ownerUserId?: string;
-      editTokenHash: string;
-    };
+    const body = await this.parseInitializeBody(req);
+    if (!body) {
+      return new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
 
     const now = new Date().toISOString();
     const newMeta: DocRoomMeta = {
@@ -623,7 +582,6 @@ export class DocRoom extends YServer<WorkerEnv> {
     };
 
     this.setMeta(newMeta);
-    console.log(`[DocRoom ${this.name}] Initialized for doc ${body.docId}`);
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,
@@ -632,7 +590,13 @@ export class DocRoom extends YServer<WorkerEnv> {
   }
 
   private async handleVerifyTokenRequest(req: Request): Promise<Response> {
-    const body = (await req.json()) as { tokenHash: string };
+    const body = await this.parseVerifyTokenBody(req);
+    if (!body) {
+      return new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     const meta = this.getMeta();
 
     const valid = meta?.editTokenHash === body.tokenHash;
@@ -643,7 +607,13 @@ export class DocRoom extends YServer<WorkerEnv> {
   }
 
   private async handleUpdateTokenRequest(req: Request): Promise<Response> {
-    const body = (await req.json()) as { editTokenHash: string };
+    const body = await this.parseUpdateTokenBody(req);
+    if (!body) {
+      return new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     const meta = this.getMeta();
 
     if (!meta) {
@@ -663,14 +633,13 @@ export class DocRoom extends YServer<WorkerEnv> {
   }
 
   private async handleUpdateGitHubRequest(req: Request): Promise<Response> {
-    const body = (await req.json()) as {
-      githubBackend: {
-        type: "gist";
-        gistId: string;
-        filename: string;
-        etag: string | null;
-      } | null;
-    };
+    const body = await this.parseUpdateGitHubBody(req);
+    if (!body) {
+      return new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
     const meta = this.getMeta();
 
     if (!meta) {
@@ -724,11 +693,13 @@ export class DocRoom extends YServer<WorkerEnv> {
         "SELECT value FROM room_meta WHERE key = 'meta'"
       );
       const row = result.one() as { value: string } | null;
-      if (row?.value) {
-        this.meta = JSON.parse(row.value) as DocRoomMeta;
+      if (row?.value && typeof row.value === "string") {
+        const parsed = JSON.parse(row.value);
+        if (this.isValidDocRoomMeta(parsed)) {
+          this.meta = parsed;
+        }
       }
-    } catch (e) {
-      console.error(`[DocRoom ${this.name}] Failed to load meta:`, e);
+    } catch {
       this.meta = null;
     }
   }
@@ -910,9 +881,6 @@ export class DocRoom extends YServer<WorkerEnv> {
     if (pending) {
       clearTimeout(pending.timeout);
       this.pendingMarkdownRequests.delete(payload.requestId);
-      console.log(
-        `[DocRoom ${this.name}] Received canonical markdown (${payload.markdown.length} chars)`
-      );
       pending.resolve(payload.markdown);
     }
   }
@@ -921,16 +889,12 @@ export class DocRoom extends YServer<WorkerEnv> {
     // Clear etag to force overwrite on next save
     const meta = this.getMeta();
     if (meta?.githubBackend) {
-      const backend = JSON.parse(meta.githubBackend) as {
-        type: "gist";
-        gistId: string;
-        filename: string;
-        etag: string | null;
-      };
-      backend.etag = null; // Clear etag to skip conditional write
-      meta.githubBackend = JSON.stringify(backend);
-      this.setMeta(meta);
-      console.log(`[DocRoom ${this.name}] Cleared etag for force push`);
+      const backend = this.parseGitHubBackend(meta.githubBackend);
+      if (backend) {
+        backend.etag = null; // Clear etag to skip conditional write
+        meta.githubBackend = JSON.stringify(backend);
+        this.setMeta(meta);
+      }
     }
 
     // Trigger immediate sync
@@ -980,12 +944,18 @@ export class DocRoom extends YServer<WorkerEnv> {
     );
 
     if (!remoteRes.ok) {
+      this.broadcastSyncStatus(
+        "error-retrying",
+        `Failed to fetch remote: ${remoteRes.status}`
+      );
       return;
     }
 
-    const remoteData = (await remoteRes.json()) as {
-      files: Record<string, { content: string }>;
-    };
+    const remoteData = await this.parseGistResponse(remoteRes);
+    if (!remoteData) {
+      this.broadcastSyncStatus("error-retrying", "Invalid remote data");
+      return;
+    }
     const remoteMarkdown = remoteData.files[backend.filename]?.content ?? "";
 
     // Update etag
@@ -999,9 +969,191 @@ export class DocRoom extends YServer<WorkerEnv> {
       type: "reload-remote",
       payload: { markdown: remoteMarkdown },
     });
+  }
 
-    console.log(
-      `[DocRoom ${this.name}] Discarded local, reloading from remote`
+  // ============================================================================
+  // Validation Helpers
+  // ============================================================================
+
+  private isValidDocRoomMeta(value: unknown): value is DocRoomMeta {
+    if (typeof value !== "object" || value === null) {
+      return false;
+    }
+    const m = value as Record<string, unknown>;
+    return (
+      typeof m.initialized === "boolean" &&
+      typeof m.docId === "string" &&
+      (m.ownerUserId === null || typeof m.ownerUserId === "string") &&
+      typeof m.editTokenHash === "string" &&
+      (m.githubBackend === null || typeof m.githubBackend === "string") &&
+      typeof m.createdAt === "string" &&
+      typeof m.lastActivityAt === "string"
     );
+  }
+
+  private parseGitHubBackend(json: string): {
+    type: "gist";
+    gistId: string;
+    filename: string;
+    etag: string | null;
+  } | null {
+    try {
+      const parsed = JSON.parse(json);
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        parsed.type === "gist" &&
+        typeof parsed.gistId === "string" &&
+        typeof parsed.filename === "string" &&
+        (parsed.etag === null || typeof parsed.etag === "string")
+      ) {
+        return {
+          type: "gist",
+          gistId: parsed.gistId,
+          filename: parsed.filename,
+          etag: parsed.etag,
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private parseSessionData(json: string): { encryptedToken: string } | null {
+    try {
+      const parsed = JSON.parse(json);
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        typeof parsed.encryptedToken === "string"
+      ) {
+        return { encryptedToken: parsed.encryptedToken };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async parseGistResponse(
+    response: Response
+  ): Promise<{ files: Record<string, { content: string }> } | null> {
+    try {
+      const parsed = await response.json();
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        typeof parsed.files === "object" &&
+        parsed.files !== null
+      ) {
+        return parsed as { files: Record<string, { content: string }> };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async parseInitializeBody(req: Request): Promise<{
+    docId: string;
+    ownerUserId?: string;
+    editTokenHash: string;
+  } | null> {
+    try {
+      const parsed = await req.json();
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        typeof parsed.docId === "string" &&
+        typeof parsed.editTokenHash === "string" &&
+        (parsed.ownerUserId === undefined ||
+          typeof parsed.ownerUserId === "string")
+      ) {
+        return {
+          docId: parsed.docId,
+          ownerUserId: parsed.ownerUserId,
+          editTokenHash: parsed.editTokenHash,
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async parseVerifyTokenBody(
+    req: Request
+  ): Promise<{ tokenHash: string } | null> {
+    try {
+      const parsed = await req.json();
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        typeof parsed.tokenHash === "string"
+      ) {
+        return { tokenHash: parsed.tokenHash };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async parseUpdateTokenBody(
+    req: Request
+  ): Promise<{ editTokenHash: string } | null> {
+    try {
+      const parsed = await req.json();
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        typeof parsed.editTokenHash === "string"
+      ) {
+        return { editTokenHash: parsed.editTokenHash };
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async parseUpdateGitHubBody(req: Request): Promise<{
+    githubBackend: {
+      type: "gist";
+      gistId: string;
+      filename: string;
+      etag: string | null;
+    } | null;
+  } | null> {
+    try {
+      const parsed = await req.json();
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        (parsed.githubBackend === null ||
+          (typeof parsed.githubBackend === "object" &&
+            parsed.githubBackend !== null &&
+            parsed.githubBackend.type === "gist" &&
+            typeof parsed.githubBackend.gistId === "string" &&
+            typeof parsed.githubBackend.filename === "string" &&
+            (parsed.githubBackend.etag === null ||
+              typeof parsed.githubBackend.etag === "string")))
+      ) {
+        return {
+          githubBackend: parsed.githubBackend
+            ? {
+                type: "gist",
+                gistId: parsed.githubBackend.gistId as string,
+                filename: parsed.githubBackend.filename as string,
+                etag: parsed.githubBackend.etag as string | null,
+              }
+            : null,
+        };
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 }
