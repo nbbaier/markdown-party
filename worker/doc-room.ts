@@ -14,6 +14,16 @@ const EDIT_CAP_REGEXP = /mp_edit_cap=([^;]+)/;
 const SESSION_COOKIE_REGEXP = /__session=([^;]+)/;
 const ANONYMOUS_TTL_MS = 24 * 60 * 60 * 1000;
 
+function timingSafeEqual(a: string, b: string): boolean {
+  const encoder = new TextEncoder();
+  const aBytes = encoder.encode(a);
+  const bBytes = encoder.encode(b);
+  if (aBytes.byteLength !== bBytes.byteLength) {
+    return false;
+  }
+  return crypto.subtle.timingSafeEqual(aBytes, bBytes);
+}
+
 interface PendingMarkdownRequest {
   resolve: (markdown: string | null) => void;
   timeout: ReturnType<typeof setTimeout>;
@@ -599,7 +609,10 @@ export class DocRoom extends YServer<WorkerEnv> {
     }
     const meta = this.getMeta();
 
-    const valid = meta?.editTokenHash === body.tokenHash;
+    let valid = false;
+    if (meta?.editTokenHash) {
+      valid = timingSafeEqual(meta.editTokenHash, body.tokenHash);
+    }
     return new Response(JSON.stringify({ valid }), {
       status: 200,
       headers: { "Content-Type": "application/json" },

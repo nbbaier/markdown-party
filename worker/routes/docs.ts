@@ -43,6 +43,21 @@ interface GitHubBackend {
 }
 
 const SESSION_COOKIE_REGEX = /__session=([^;]+)/;
+const DOC_ID_REGEX = /^[a-z]+-[a-z]+-[a-z]+$/;
+const GIST_ID_REGEX = /^[a-f0-9]+$/i;
+const FILENAME_REGEX = /^[\w\-. ]+$/;
+
+function validateDocId(docId: string): boolean {
+  return DOC_ID_REGEX.test(docId);
+}
+
+function validateGistId(gistId: string): boolean {
+  return GIST_ID_REGEX.test(gistId);
+}
+
+function validateFilename(filename: string): boolean {
+  return FILENAME_REGEX.test(filename);
+}
 
 function createDoRequest(
   docId: string,
@@ -158,6 +173,9 @@ docRoutes.post("/", async (c) => {
 // POST /api/docs/:doc_id/claim - Exchange edit token for edit cookie
 docRoutes.post("/:doc_id/claim", async (c) => {
   const docId = c.req.param("doc_id");
+  if (!validateDocId(docId)) {
+    return c.json({ error: "Invalid document ID" }, 400);
+  }
   const body = await c.req.json<{ token: string }>();
 
   const base64url = body.token;
@@ -209,6 +227,9 @@ docRoutes.post("/:doc_id/claim", async (c) => {
 // GET /api/docs/:doc_id - Get document metadata
 docRoutes.get("/:doc_id", async (c) => {
   const docId = c.req.param("doc_id");
+  if (!validateDocId(docId)) {
+    return c.json({ error: "Invalid document ID" }, 400);
+  }
   const stub = c.env.DOC_ROOM.get(c.env.DOC_ROOM.idFromName(docId));
 
   const metaResponse = await stub.fetch(createDoRequest(docId, "/meta"));
@@ -230,6 +251,9 @@ docRoutes.get("/:doc_id", async (c) => {
 // POST /api/docs/:doc_id/edit-token - Regenerate edit token (owner only)
 docRoutes.post("/:doc_id/edit-token", authMiddleware, async (c) => {
   const docId = c.req.param("doc_id");
+  if (!validateDocId(docId)) {
+    return c.json({ error: "Invalid document ID" }, 400);
+  }
   const userId = c.get("userId");
 
   const stub = c.env.DOC_ROOM.get(c.env.DOC_ROOM.idFromName(docId));
@@ -259,6 +283,9 @@ docRoutes.post("/:doc_id/edit-token", authMiddleware, async (c) => {
 // POST /api/docs/:doc_id/github - Link document to GitHub Gist (owner only)
 docRoutes.post("/:doc_id/github", authMiddleware, async (c) => {
   const docId = c.req.param("doc_id");
+  if (!validateDocId(docId)) {
+    return c.json({ error: "Invalid document ID" }, 400);
+  }
   const userId = c.get("userId");
   const body = await c.req.json<{
     gist_id?: string;
@@ -293,6 +320,14 @@ docRoutes.post("/:doc_id/github", authMiddleware, async (c) => {
 
   let gistId = body.gist_id;
   let filename = body.filename ?? "document.md";
+
+  if (gistId && !validateGistId(gistId)) {
+    return c.json({ error: "Invalid gist ID format" }, 400);
+  }
+  if (!validateFilename(filename)) {
+    return c.json({ error: "Invalid filename" }, 400);
+  }
+
   let etag: string | null = null;
 
   if (gistId) {
@@ -379,6 +414,9 @@ docRoutes.post("/:doc_id/github", authMiddleware, async (c) => {
 // DELETE /api/docs/:doc_id/github - Unlink from GitHub (owner only)
 docRoutes.delete("/:doc_id/github", authMiddleware, async (c) => {
   const docId = c.req.param("doc_id");
+  if (!validateDocId(docId)) {
+    return c.json({ error: "Invalid document ID" }, 400);
+  }
   const userId = c.get("userId");
 
   const stub = c.env.DOC_ROOM.get(c.env.DOC_ROOM.idFromName(docId));

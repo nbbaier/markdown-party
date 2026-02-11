@@ -40,14 +40,13 @@ export async function csrfMiddleware(c: Context, next: Next): Promise<void> {
 
   const cookieHeader = c.req.header("cookie") ?? "";
   const match = cookieHeader.match(CSRF_COOKIE_REGEX);
-  const cookieToken = match?.[1];
+  let cookieToken = match?.[1];
 
-  // If no CSRF cookie exists, the user hasn't completed login yet.
-  // SameSite=Strict on the session cookie provides primary CSRF protection.
-  // Double-submit is defense-in-depth — only enforce when the cookie is present.
+  // Issue CSRF cookie to all visitors on first request if not present.
+  // This ensures anonymous users have CSRF protection for state-changing operations.
   if (!cookieToken) {
-    await next();
-    return;
+    cookieToken = generateCsrfToken();
+    setCsrfCookie(c, cookieToken);
   }
 
   const headerToken = c.req.header(CSRF_HEADER_NAME);
