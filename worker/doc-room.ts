@@ -1022,15 +1022,15 @@ export class DocRoom extends YServer<WorkerEnv> {
 
   private parseSessionData(json: string): { encryptedToken: string } | null {
     try {
-      const parsed = JSON.parse(json);
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        typeof parsed.encryptedToken === "string"
-      ) {
-        return { encryptedToken: parsed.encryptedToken };
+      const parsed = JSON.parse(json) as unknown;
+      if (typeof parsed !== "object" || parsed === null) {
+        return null;
       }
-      return null;
+      const parsedRecord = parsed as Record<string, unknown>;
+      if (typeof parsedRecord.encryptedToken !== "string") {
+        return null;
+      }
+      return { encryptedToken: parsedRecord.encryptedToken };
     } catch {
       return null;
     }
@@ -1040,16 +1040,20 @@ export class DocRoom extends YServer<WorkerEnv> {
     response: Response
   ): Promise<{ files: Record<string, { content: string }> } | null> {
     try {
-      const parsed = await response.json();
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        typeof parsed.files === "object" &&
-        parsed.files !== null
-      ) {
-        return parsed as { files: Record<string, { content: string }> };
+      const parsed = (await response.json()) as unknown;
+      if (typeof parsed !== "object" || parsed === null) {
+        return null;
       }
-      return null;
+      const parsedRecord = parsed as Record<string, unknown>;
+      if (
+        typeof parsedRecord.files !== "object" ||
+        parsedRecord.files === null
+      ) {
+        return null;
+      }
+      return {
+        files: parsedRecord.files as Record<string, { content: string }>,
+      };
     } catch {
       return null;
     }
@@ -1061,22 +1065,24 @@ export class DocRoom extends YServer<WorkerEnv> {
     editTokenHash: string;
   } | null> {
     try {
-      const parsed = await req.json();
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        typeof parsed.docId === "string" &&
-        typeof parsed.editTokenHash === "string" &&
-        (parsed.ownerUserId === undefined ||
-          typeof parsed.ownerUserId === "string")
-      ) {
-        return {
-          docId: parsed.docId,
-          ownerUserId: parsed.ownerUserId,
-          editTokenHash: parsed.editTokenHash,
-        };
+      const parsed = (await req.json()) as unknown;
+      if (typeof parsed !== "object" || parsed === null) {
+        return null;
       }
-      return null;
+      const parsedRecord = parsed as Record<string, unknown>;
+      if (
+        typeof parsedRecord.docId !== "string" ||
+        typeof parsedRecord.editTokenHash !== "string" ||
+        (parsedRecord.ownerUserId !== undefined &&
+          typeof parsedRecord.ownerUserId !== "string")
+      ) {
+        return null;
+      }
+      return {
+        docId: parsedRecord.docId,
+        ownerUserId: parsedRecord.ownerUserId,
+        editTokenHash: parsedRecord.editTokenHash,
+      };
     } catch {
       return null;
     }
@@ -1086,15 +1092,15 @@ export class DocRoom extends YServer<WorkerEnv> {
     req: Request
   ): Promise<{ tokenHash: string } | null> {
     try {
-      const parsed = await req.json();
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        typeof parsed.tokenHash === "string"
-      ) {
-        return { tokenHash: parsed.tokenHash };
+      const parsed = (await req.json()) as unknown;
+      if (typeof parsed !== "object" || parsed === null) {
+        return null;
       }
-      return null;
+      const parsedRecord = parsed as Record<string, unknown>;
+      if (typeof parsedRecord.tokenHash !== "string") {
+        return null;
+      }
+      return { tokenHash: parsedRecord.tokenHash };
     } catch {
       return null;
     }
@@ -1104,15 +1110,15 @@ export class DocRoom extends YServer<WorkerEnv> {
     req: Request
   ): Promise<{ editTokenHash: string } | null> {
     try {
-      const parsed = await req.json();
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        typeof parsed.editTokenHash === "string"
-      ) {
-        return { editTokenHash: parsed.editTokenHash };
+      const parsed = (await req.json()) as unknown;
+      if (typeof parsed !== "object" || parsed === null) {
+        return null;
       }
-      return null;
+      const parsedRecord = parsed as Record<string, unknown>;
+      if (typeof parsedRecord.editTokenHash !== "string") {
+        return null;
+      }
+      return { editTokenHash: parsedRecord.editTokenHash };
     } catch {
       return null;
     }
@@ -1127,31 +1133,40 @@ export class DocRoom extends YServer<WorkerEnv> {
     } | null;
   } | null> {
     try {
-      const parsed = await req.json();
-      if (
-        typeof parsed === "object" &&
-        parsed !== null &&
-        (parsed.githubBackend === null ||
-          (typeof parsed.githubBackend === "object" &&
-            parsed.githubBackend !== null &&
-            parsed.githubBackend.type === "gist" &&
-            typeof parsed.githubBackend.gistId === "string" &&
-            typeof parsed.githubBackend.filename === "string" &&
-            (parsed.githubBackend.etag === null ||
-              typeof parsed.githubBackend.etag === "string")))
-      ) {
-        return {
-          githubBackend: parsed.githubBackend
-            ? {
-                type: "gist",
-                gistId: parsed.githubBackend.gistId as string,
-                filename: parsed.githubBackend.filename as string,
-                etag: parsed.githubBackend.etag as string | null,
-              }
-            : null,
-        };
+      const parsed = (await req.json()) as unknown;
+      if (typeof parsed !== "object" || parsed === null) {
+        return null;
       }
-      return null;
+      const parsedRecord = parsed as Record<string, unknown>;
+      if (parsedRecord.githubBackend === null) {
+        return { githubBackend: null };
+      }
+      if (
+        typeof parsedRecord.githubBackend !== "object" ||
+        parsedRecord.githubBackend === null
+      ) {
+        return null;
+      }
+      const githubBackend = parsedRecord.githubBackend as Record<
+        string,
+        unknown
+      >;
+      if (
+        githubBackend.type !== "gist" ||
+        typeof githubBackend.gistId !== "string" ||
+        typeof githubBackend.filename !== "string" ||
+        (githubBackend.etag !== null && typeof githubBackend.etag !== "string")
+      ) {
+        return null;
+      }
+      return {
+        githubBackend: {
+          type: "gist",
+          gistId: githubBackend.gistId,
+          filename: githubBackend.filename,
+          etag: githubBackend.etag as string | null,
+        },
+      };
     } catch {
       return null;
     }
