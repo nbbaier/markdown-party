@@ -30,7 +30,7 @@ markdown.party is a collaborative markdown editor where anyone can create and ed
    - `DocRoom` Durable Object (`worker/doc-room.ts`) extending YServer for Yjs CRDT sync + DO SQLite persistence
    - Entry: `worker/index.ts`
 
-- **`src/shared/`** and **`worker/shared/`** — shared types/utilities scoped to client and worker respectively
+- **`src/shared/`** and **`worker/shared/`** — shared types/utilities used across client and worker runtime boundaries
 
 ### Document Lifecycle
 

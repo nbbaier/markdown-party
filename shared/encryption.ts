@@ -46,7 +46,7 @@ function findKey(
   return config.previousKeys.find((k) => k.version === version);
 }
 
-export function parseEncryptedBlob(encrypted: string): EncryptedBlob {
+function parseEncryptedBlob(encrypted: string): EncryptedBlob {
   const match = encrypted.match(ENCRYPTED_BLOB_REGEX);
   if (!match) {
     throw new Error("Invalid encrypted format");
@@ -57,18 +57,6 @@ export function parseEncryptedBlob(encrypted: string): EncryptedBlob {
   const ciphertext = base64UrlDecode(match[3]);
 
   return { version, iv, ciphertext };
-}
-
-export function needsReEncryption(
-  encrypted: string,
-  config: EncryptionConfig
-): boolean {
-  try {
-    const blob = parseEncryptedBlob(encrypted);
-    return blob.version < config.currentKey.version;
-  } catch {
-    return true;
-  }
 }
 
 export async function encrypt(

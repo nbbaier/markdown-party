@@ -81,20 +81,6 @@ export type CustomMessage =
   | { type: typeof MessageTypePushLocal; payload: PushLocalPayload }
   | { type: typeof MessageTypeDiscardLocal; payload: DiscardLocalPayload };
 
-export type MessageDirection = "do-to-client" | "client-to-do";
-
-export const MESSAGE_DIRECTION: { [key: string]: MessageDirection } = {
-  [MessageTypeRequestMarkdown]: "do-to-client",
-  [MessageTypeCanonicalMarkdown]: "client-to-do",
-  [MessageTypeNeedsInit]: "do-to-client",
-  [MessageTypeReloadRemote]: "do-to-client",
-  [MessageTypeRemoteChanged]: "do-to-client",
-  [MessageTypeSyncStatus]: "do-to-client",
-  [MessageTypeErrorRetrying]: "do-to-client",
-  [MessageTypePushLocal]: "client-to-do",
-  [MessageTypeDiscardLocal]: "client-to-do",
-};
-
 export function encodeMessage(message: CustomMessage): string {
   return JSON.stringify(message);
 }
@@ -171,12 +157,4 @@ export function decodeMessage(data: string): CustomMessage {
   }
 
   return parsed as CustomMessage;
-}
-
-export function isClientMessage(message: CustomMessage): boolean {
-  return MESSAGE_DIRECTION[message.type] === "client-to-do";
-}
-
-export function isDOMessage(message: CustomMessage): boolean {
-  return MESSAGE_DIRECTION[message.type] === "do-to-client";
 }

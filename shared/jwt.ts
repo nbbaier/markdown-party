@@ -116,13 +116,3 @@ export async function verifyJwt(
 
   return claims;
 }
-
-// Default JWT options for markdown.party
-export function getDefaultJwtOptions(secret: string): JwtOptions {
-  return {
-    secret,
-    expiresInSeconds: 3600,
-    audience: "markdown.party",
-    issuer: "markdown.party",
-  };
-}
