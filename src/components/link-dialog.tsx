@@ -34,7 +34,7 @@ interface LinkDialogProps {
   onSubmit: (url: string) => void;
 }
 
-export default function LinkDialog({
+export function LinkDialog({
   open,
   onOpenChange,
   defaultUrl,

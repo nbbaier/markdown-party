@@ -18,7 +18,7 @@ import {
   Table,
 } from "lucide-react";
 import { useState } from "react";
-import LinkDialog from "@/components/link-dialog";
+import { LinkDialog } from "@/components/link-dialog";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Toggle } from "@/components/ui/toggle";
@@ -80,7 +80,7 @@ function ToolbarButton({
   );
 }
 
-export default function Toolbar({ editor }: ToolbarProps) {
+export function Toolbar({ editor }: ToolbarProps) {
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkDefaultUrl, setLinkDefaultUrl] = useState("");
 
@@ -120,159 +120,165 @@ export default function Toolbar({ editor }: ToolbarProps) {
   };
 
   return (
-    <TooltipProvider>
-      <div className="flex items-center gap-0.5 border-b bg-background px-4 py-2">
-        <ToolbarToggle
-          onPressedChange={() => editor.chain().focus().toggleBold().run()}
-          pressed={activeState.bold}
-          tooltip="Bold (Cmd+B)"
-        >
-          <Bold size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <ToolbarToggle
-          onPressedChange={() => editor.chain().focus().toggleItalic().run()}
-          pressed={activeState.italic}
-          tooltip="Italic (Cmd+I)"
-        >
-          <Italic size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <ToolbarToggle
-          onPressedChange={() => editor.chain().focus().toggleStrike().run()}
-          pressed={activeState.strike}
-          tooltip="Strikethrough"
-        >
-          <Strikethrough size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <ToolbarToggle
-          onPressedChange={() => editor.chain().focus().toggleCode().run()}
-          pressed={activeState.code}
-          tooltip="Inline Code"
-        >
-          <Code size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <ToolbarToggle
-          onPressedChange={openLinkDialog}
-          pressed={activeState.link}
-          tooltip="Link (Cmd+K)"
-        >
-          <Link size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <Separator className="mx-1 h-6" orientation="vertical" />
-
-        <ToolbarToggle
-          onPressedChange={() =>
-            editor.chain().focus().toggleHeading({ level: 1 }).run()
-          }
-          pressed={activeState.heading1}
-          tooltip="Heading 1"
-        >
-          <Heading1 size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <ToolbarToggle
-          onPressedChange={() =>
-            editor.chain().focus().toggleHeading({ level: 2 }).run()
-          }
-          pressed={activeState.heading2}
-          tooltip="Heading 2"
-        >
-          <Heading2 size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <ToolbarToggle
-          onPressedChange={() =>
-            editor.chain().focus().toggleHeading({ level: 3 }).run()
-          }
-          pressed={activeState.heading3}
-          tooltip="Heading 3"
-        >
-          <Heading3 size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <Separator className="mx-1 h-6" orientation="vertical" />
-
-        <ToolbarToggle
-          onPressedChange={() =>
-            editor.chain().focus().toggleBulletList().run()
-          }
-          pressed={activeState.bulletList}
-          tooltip="Bullet List"
-        >
-          <List size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <ToolbarToggle
-          onPressedChange={() =>
-            editor.chain().focus().toggleOrderedList().run()
-          }
-          pressed={activeState.orderedList}
-          tooltip="Ordered List"
-        >
-          <ListOrdered size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <ToolbarToggle
-          onPressedChange={() => editor.chain().focus().toggleTaskList().run()}
-          pressed={activeState.taskList}
-          tooltip="Task List"
-        >
-          <ListTodo size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <Separator className="mx-1 h-6" orientation="vertical" />
-
-        <ToolbarButton
-          onClick={() =>
-            editor
-              .chain()
-              .focus()
-              .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
-              .run()
-          }
-          tooltip="Insert Table"
-        >
-          <Table size={ICON_SIZE} />
-        </ToolbarButton>
-
-        <ToolbarToggle
-          onPressedChange={() =>
-            editor.chain().focus().toggleBlockquote().run()
-          }
-          pressed={activeState.blockquote}
-          tooltip="Blockquote"
-        >
-          <Quote size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <ToolbarToggle
-          onPressedChange={() => editor.chain().focus().toggleCodeBlock().run()}
-          pressed={activeState.codeBlock}
-          tooltip="Code Block"
-        >
-          <CodeSquare size={ICON_SIZE} />
-        </ToolbarToggle>
-
-        <ToolbarButton
-          onClick={() => editor.chain().focus().setHorizontalRule().run()}
-          tooltip="Horizontal Rule"
-        >
-          <Minus size={ICON_SIZE} />
-        </ToolbarButton>
-
-        <div className="ml-auto">
-          <ToolbarButton
-            onClick={() => downloadMarkdown(editor)}
-            tooltip="Download .md (Cmd+S)"
+    <>
+      <TooltipProvider>
+        <div className="flex items-center gap-0.5 border-b bg-background px-4 py-2">
+          <ToolbarToggle
+            onPressedChange={() => editor.chain().focus().toggleBold().run()}
+            pressed={activeState.bold}
+            tooltip="Bold (Cmd+B)"
           >
-            <Download size={ICON_SIZE} />
+            <Bold size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <ToolbarToggle
+            onPressedChange={() => editor.chain().focus().toggleItalic().run()}
+            pressed={activeState.italic}
+            tooltip="Italic (Cmd+I)"
+          >
+            <Italic size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <ToolbarToggle
+            onPressedChange={() => editor.chain().focus().toggleStrike().run()}
+            pressed={activeState.strike}
+            tooltip="Strikethrough"
+          >
+            <Strikethrough size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <ToolbarToggle
+            onPressedChange={() => editor.chain().focus().toggleCode().run()}
+            pressed={activeState.code}
+            tooltip="Inline Code"
+          >
+            <Code size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <ToolbarToggle
+            onPressedChange={openLinkDialog}
+            pressed={activeState.link}
+            tooltip="Link (Cmd+K)"
+          >
+            <Link size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <Separator className="mx-1 h-6" orientation="vertical" />
+
+          <ToolbarToggle
+            onPressedChange={() =>
+              editor.chain().focus().toggleHeading({ level: 1 }).run()
+            }
+            pressed={activeState.heading1}
+            tooltip="Heading 1"
+          >
+            <Heading1 size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <ToolbarToggle
+            onPressedChange={() =>
+              editor.chain().focus().toggleHeading({ level: 2 }).run()
+            }
+            pressed={activeState.heading2}
+            tooltip="Heading 2"
+          >
+            <Heading2 size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <ToolbarToggle
+            onPressedChange={() =>
+              editor.chain().focus().toggleHeading({ level: 3 }).run()
+            }
+            pressed={activeState.heading3}
+            tooltip="Heading 3"
+          >
+            <Heading3 size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <Separator className="mx-1 h-6" orientation="vertical" />
+
+          <ToolbarToggle
+            onPressedChange={() =>
+              editor.chain().focus().toggleBulletList().run()
+            }
+            pressed={activeState.bulletList}
+            tooltip="Bullet List"
+          >
+            <List size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <ToolbarToggle
+            onPressedChange={() =>
+              editor.chain().focus().toggleOrderedList().run()
+            }
+            pressed={activeState.orderedList}
+            tooltip="Ordered List"
+          >
+            <ListOrdered size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <ToolbarToggle
+            onPressedChange={() =>
+              editor.chain().focus().toggleTaskList().run()
+            }
+            pressed={activeState.taskList}
+            tooltip="Task List"
+          >
+            <ListTodo size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <Separator className="mx-1 h-6" orientation="vertical" />
+
+          <ToolbarButton
+            onClick={() =>
+              editor
+                .chain()
+                .focus()
+                .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+                .run()
+            }
+            tooltip="Insert Table"
+          >
+            <Table size={ICON_SIZE} />
           </ToolbarButton>
+
+          <ToolbarToggle
+            onPressedChange={() =>
+              editor.chain().focus().toggleBlockquote().run()
+            }
+            pressed={activeState.blockquote}
+            tooltip="Blockquote"
+          >
+            <Quote size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <ToolbarToggle
+            onPressedChange={() =>
+              editor.chain().focus().toggleCodeBlock().run()
+            }
+            pressed={activeState.codeBlock}
+            tooltip="Code Block"
+          >
+            <CodeSquare size={ICON_SIZE} />
+          </ToolbarToggle>
+
+          <ToolbarButton
+            onClick={() => editor.chain().focus().setHorizontalRule().run()}
+            tooltip="Horizontal Rule"
+          >
+            <Minus size={ICON_SIZE} />
+          </ToolbarButton>
+
+          <div className="ml-auto">
+            <ToolbarButton
+              onClick={() => downloadMarkdown(editor)}
+              tooltip="Download .md (Cmd+S)"
+            >
+              <Download size={ICON_SIZE} />
+            </ToolbarButton>
+          </div>
         </div>
-      </div>
+      </TooltipProvider>
 
       <LinkDialog
         defaultUrl={linkDefaultUrl}
@@ -280,6 +286,6 @@ export default function Toolbar({ editor }: ToolbarProps) {
         onSubmit={handleLinkSubmit}
         open={linkDialogOpen}
       />
-    </TooltipProvider>
+    </>
   );
 }

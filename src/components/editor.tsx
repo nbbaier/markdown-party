@@ -11,7 +11,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { useEffect, useRef } from "react";
 import { downloadMarkdown } from "@/lib/download";
-import Toolbar from "./toolbar";
+import { Toolbar } from "./toolbar";
 
 const STORAGE_KEY = "markdown-party-content";
 const AUTO_SAVE_INTERVAL = 10_000;
@@ -53,7 +53,7 @@ function saveToLocalStorage(editor: TiptapEditor) {
   localStorage.setItem(STORAGE_KEY, markdown);
 }
 
-export default function Editor() {
+export function Editor() {
   const isDirtyRef = useRef(false);
 
   const editor = useEditor({
