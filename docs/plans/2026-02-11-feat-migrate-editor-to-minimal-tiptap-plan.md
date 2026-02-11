@@ -66,10 +66,10 @@ src/
 
 ### Step 1: Install shadcn/ui components
 
-- [ ] Re-add `src/lib/utils.ts` with `cn()` helper
-- [ ] Install 6 shadcn components: `bunx shadcn@latest add toggle separator tooltip dialog input label`
-- [ ] Verify `bun x ultracite check` passes
-- [ ] Verify `vite build` succeeds
+- [x] Re-add `src/lib/utils.ts` with `cn()` helper
+- [x] Install 6 shadcn components: `bunx shadcn@latest add toggle separator tooltip dialog input label`
+- [x] Verify `bun x ultracite check` passes
+- [x] Verify `vite build` succeeds
 
 **Files created:**
 - `src/lib/utils.ts`
@@ -82,23 +82,23 @@ src/
 
 ### Step 2: Build link dialog component
 
-- [ ] Create `src/components/link-dialog.tsx` using shadcn `Dialog`, `Input`, `Label`
-- [ ] Accept props: `open`, `onOpenChange`, `defaultUrl`, `onSubmit(url: string | null)`
-- [ ] Validate URL against the same allowlist as current code (http, https, mailto, relative, anchor)
-- [ ] Support three actions: set link (submit URL), remove link (submit empty), cancel (close dialog)
-- [ ] Show validation error inline for invalid URLs
-- [ ] Auto-focus the input field on open
+- [x] Create `src/components/link-dialog.tsx` using shadcn `Dialog`, `Input`, `Label`
+- [x] Accept props: `open`, `onOpenChange`, `defaultUrl`, `onSubmit(url: string | null)`
+- [x] Validate URL against the same allowlist as current code (http, https, mailto, relative, anchor)
+- [x] Support three actions: set link (submit URL), remove link (submit empty), cancel (close dialog)
+- [x] Show validation error inline for invalid URLs
+- [x] Auto-focus the input field on open
 
 ### Step 3: Rewrite toolbar with shadcn components
 
-- [ ] Replace `ToolbarButton` with shadcn `Toggle` (use `pressed` prop for active state)
-- [ ] Replace hand-rolled `Separator` with shadcn `Separator` (orientation="vertical")
-- [ ] Wrap each toggle in shadcn `Tooltip` with label + keyboard shortcut
-- [ ] Replace `window.prompt` link flow with `LinkDialog` component from Step 2
-- [ ] Keep the same toolbar layout: inline marks | headings | lists | blocks | download (ml-auto)
-- [ ] Keep all existing `editor.chain().focus()...run()` command calls — they don't change
-- [ ] Keep the `useEditorState` selector for active states — it doesn't change
-- [ ] Remove the biome-ignore lint suppression for `window.prompt` (no longer needed)
+- [x] Replace `ToolbarButton` with shadcn `Toggle` (use `pressed` prop for active state)
+- [x] Replace hand-rolled `Separator` with shadcn `Separator` (orientation="vertical")
+- [x] Wrap each toggle in shadcn `Tooltip` with label + keyboard shortcut
+- [x] Replace `window.prompt` link flow with `LinkDialog` component from Step 2
+- [x] Keep the same toolbar layout: inline marks | headings | lists | blocks | download (ml-auto)
+- [x] Keep all existing `editor.chain().focus()...run()` command calls — they don't change
+- [x] Keep the `useEditorState` selector for active states — it doesn't change
+- [x] Remove the biome-ignore lint suppression for `window.prompt` (no longer needed)
 
 **Files modified:**
 - `src/components/toolbar.tsx` (rewrite)
@@ -120,9 +120,9 @@ Update hardcoded Tailwind color vars in `.tiptap` styles (`src/index.css` lines 
 | `var(--color-blue-100)` | `var(--accent)` | Selected table cell |
 | `var(--color-blue-600)` | `var(--primary)` | Link color |
 
-- [ ] Update each `.tiptap` CSS rule per the table above
-- [ ] Verify editor content renders correctly in light mode
-- [ ] Run `bun x ultracite fix` and `bun x ultracite check`
+- [x] Update each `.tiptap` CSS rule per the table above
+- [x] Verify editor content renders correctly in light mode
+- [x] Run `bun x ultracite fix` and `bun x ultracite check`
 
 **Files modified:**
 - `src/index.css`
