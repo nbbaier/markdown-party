@@ -7,11 +7,5 @@
     "bindings": [{ "name": "DOC_ROOM", "class_name": "DocRoom" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DocRoom"] }],
-  "kv_namespaces": [{ "binding": "SESSION_KV", "id": "sessions" }],
-  "vars": {
-    "GITHUB_CLIENT_ID": "",
-    "GITHUB_CLIENT_SECRET": "",
-    "JWT_SECRET": "",
-    "ENCRYPTION_KEY_V1": ""
-  }
+  "kv_namespaces": [{ "binding": "SESSION_KV", "id": "sessions" }]
 }

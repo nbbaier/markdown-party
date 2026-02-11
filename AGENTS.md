@@ -46,6 +46,7 @@ markdown.party is a collaborative markdown editor where anyone can create and ed
 
 - `tsconfig.json` references `tsconfig.app.json`, `tsconfig.node.json`, `tsconfig.worker.json`
 - Wrangler config in `wrangler.jsonc`
+- Runtime secrets are configured via Wrangler secrets / local `.dev.vars` (not `vars` in `wrangler.jsonc`)
 - Biome config in `biome.jsonc` extends `ultracite/biome/core` + `ultracite/biome/react`
 
 ## Code Style
