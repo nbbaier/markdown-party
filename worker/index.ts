@@ -21,20 +21,28 @@ app.use("*", async (c, next) => {
   );
   c.header("X-Content-Type-Options", "nosniff");
   c.header("X-Frame-Options", "DENY");
-  c.header(
-    "Content-Security-Policy",
-    [
-      "default-src 'self'",
-      "script-src 'self'",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' https://avatars.githubusercontent.com data:",
-      "connect-src 'self' wss://*.markdown.party wss://localhost:*",
-      "frame-src 'none'",
-      "object-src 'none'",
-      "base-uri 'self'",
-      "form-action 'self' https://github.com",
-    ].join("; ")
-  );
+
+  // Only set CSP on non-HTML responses. The SPA fallback serves HTML that
+  // includes Vite-injected inline scripts in dev mode, which script-src 'self'
+  // would block. In production the built HTML has no inline scripts, but CSP
+  // for the page is better handled via <meta> tag or Cloudflare configuration.
+  const contentType = c.res.headers.get("content-type") ?? "";
+  if (!contentType.includes("text/html")) {
+    c.header(
+      "Content-Security-Policy",
+      [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self' 'unsafe-inline'",
+        "img-src 'self' https://avatars.githubusercontent.com data:",
+        "connect-src 'self' wss://*.markdown.party wss://localhost:*",
+        "frame-src 'none'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self' https://github.com",
+      ].join("; ")
+    );
+  }
 });
 
 app.get("/api/health", (c) => {
