@@ -2,7 +2,9 @@ import type { Connection, ConnectionContext } from "partyserver";
 import { YServer } from "y-partyserver";
 // biome-ignore lint/performance/noNamespaceImport: yjs has many exports we need
 import * as Y from "yjs";
+import { decrypt } from "../shared/encryption";
 import { verifyJwt } from "../shared/jwt";
+import type { DocMeta as DocRoomMeta } from "../src/shared/doc-meta";
 import { verifyEditCookie } from "../src/shared/edit-cookie";
 import {
   type CanonicalMarkdownPayload,
@@ -12,9 +14,10 @@ import {
   MessageTypeCanonicalMarkdown,
   type SyncState,
 } from "../src/shared/messages";
+import type { WorkerBindings } from "./shared/env";
+import { SESSION_COOKIE_REGEX } from "./shared/session";
 
 const EDIT_CAP_REGEXP = /mp_edit_cap=([^;]+)/;
-const SESSION_COOKIE_REGEXP = /__session=([^;]+)/;
 const ANONYMOUS_TTL_MS = 24 * 60 * 60 * 1000;
 
 function timingSafeEqual(a: string, b: string): boolean {
@@ -32,26 +35,7 @@ interface PendingMarkdownRequest {
   timeout: ReturnType<typeof setTimeout>;
 }
 
-interface WorkerEnv {
-  DOC_ROOM: DurableObjectNamespace;
-  SESSION_KV: KVNamespace;
-  GITHUB_CLIENT_ID: string;
-  GITHUB_CLIENT_SECRET: string;
-  JWT_SECRET: string;
-  ENCRYPTION_KEY_V1: string;
-}
-
-interface DocRoomMeta {
-  initialized: boolean;
-  docId: string;
-  ownerUserId: string | null;
-  editTokenHash: string;
-  githubBackend: string | null;
-  createdAt: string;
-  lastActivityAt: string;
-}
-
-export class DocRoom extends YServer<WorkerEnv> {
+export class DocRoom extends YServer<WorkerBindings> {
   static options = {
     hibernate: true,
   };
@@ -301,7 +285,6 @@ export class DocRoom extends YServer<WorkerEnv> {
       this.broadcastSyncStatus("pending-sync", "Invalid session data");
       return null;
     }
-    const { decrypt } = await import("../shared/encryption");
     return decrypt(parsedSession.encryptedToken, {
       currentKey: { version: 1, rawKey: this.env.ENCRYPTION_KEY_V1 },
       previousKeys: [],
@@ -859,7 +842,7 @@ export class DocRoom extends YServer<WorkerEnv> {
       return false;
     }
 
-    const sessionMatch = cookieHeader.match(SESSION_COOKIE_REGEXP);
+    const sessionMatch = cookieHeader.match(SESSION_COOKIE_REGEX);
     if (!sessionMatch) {
       return false;
     }

@@ -27,6 +27,15 @@ export function setCsrfCookie(c: Context, token: string): void {
 }
 
 export async function csrfMiddleware(c: Context, next: Next): Promise<void> {
+  const cookieHeader = c.req.header("cookie") ?? "";
+  const match = cookieHeader.match(CSRF_COOKIE_REGEX);
+  let cookieToken = match?.[1];
+
+  if (!cookieToken) {
+    cookieToken = generateCsrfToken();
+    setCsrfCookie(c, cookieToken);
+  }
+
   const method = c.req.method.toUpperCase();
   if (
     method !== "POST" &&
@@ -36,17 +45,6 @@ export async function csrfMiddleware(c: Context, next: Next): Promise<void> {
   ) {
     await next();
     return;
-  }
-
-  const cookieHeader = c.req.header("cookie") ?? "";
-  const match = cookieHeader.match(CSRF_COOKIE_REGEX);
-  let cookieToken = match?.[1];
-
-  // Issue CSRF cookie to all visitors on first request if not present.
-  // This ensures anonymous users have CSRF protection for state-changing operations.
-  if (!cookieToken) {
-    cookieToken = generateCsrfToken();
-    setCsrfCookie(c, cookieToken);
   }
 
   const headerToken = c.req.header(CSRF_HEADER_NAME);

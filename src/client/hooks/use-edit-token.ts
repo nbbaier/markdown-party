@@ -33,27 +33,29 @@ export function useEditToken(docId: string | undefined): UseEditTokenResult {
     claimedRef.current = true;
     const token = match[1];
 
-    fetchWithCsrf(`/api/docs/${docId}/claim`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ token }),
-      credentials: "same-origin",
-    })
-      .then((res) => {
+    async function claimToken() {
+      try {
+        const res = await fetchWithCsrf(`/api/docs/${docId}/claim`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+          credentials: "same-origin",
+        });
         if (res.ok) {
           setHasEditCapability(true);
         }
-      })
-      // biome-ignore lint/suspicious/noEmptyBlockStatements: Ignore claim errors silently
-      .catch(() => {})
-      .finally(() => {
-        history.replaceState(
-          null,
-          "",
-          window.location.pathname + window.location.search
-        );
-        setClaiming(false);
-      });
+      } catch {
+        setHasEditCapability(false);
+      }
+      history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search
+      );
+      setClaiming(false);
+    }
+
+    claimToken();
   }, [docId]);
 
   return { hasEditCapability, claiming };

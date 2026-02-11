@@ -7,24 +7,18 @@ export { DocRoom } from "./doc-room";
 import authRoutes from "./routes/auth";
 import docRoutes, { handleRawDoc } from "./routes/docs";
 import { csrfMiddleware } from "./shared/csrf";
+import type { WorkerEnv } from "./shared/env";
 
-interface Env {
-  Bindings: {
-    DOC_ROOM: DurableObjectNamespace;
-    SESSION_KV: KVNamespace;
-    GITHUB_CLIENT_ID: string;
-    GITHUB_CLIENT_SECRET: string;
-    JWT_SECRET: string;
-    ENCRYPTION_KEY_V1: string;
-  };
-}
-
-const app = new Hono<Env>();
+const app = new Hono<WorkerEnv>();
 
 // Security headers middleware
 app.use("*", async (c, next) => {
   await next();
   c.header("Referrer-Policy", "strict-origin");
+  c.header(
+    "Strict-Transport-Security",
+    "max-age=63072000; includeSubDomains; preload"
+  );
   c.header("X-Content-Type-Options", "nosniff");
   c.header("X-Frame-Options", "DENY");
   c.header(
@@ -48,6 +42,7 @@ app.get("/api/health", (c) => {
 });
 
 // CSRF protection on state-changing API routes
+app.use("/api/docs", csrfMiddleware);
 app.use("/api/docs/*", csrfMiddleware);
 app.use("/api/auth/logout", csrfMiddleware);
 app.use("/api/auth/refresh", csrfMiddleware);

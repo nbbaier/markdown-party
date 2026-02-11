@@ -1,25 +1,9 @@
 import { createMiddleware } from "hono/factory";
 import { verifyJwt } from "../../shared/jwt";
+import type { WorkerEnv } from "./env";
+import { SESSION_COOKIE_REGEX } from "./session";
 
-interface Env {
-  Bindings: {
-    DOC_ROOM: DurableObjectNamespace;
-    SESSION_KV: KVNamespace;
-    GITHUB_CLIENT_ID: string;
-    GITHUB_CLIENT_SECRET: string;
-    JWT_SECRET: string;
-    ENCRYPTION_KEY_V1: string;
-  };
-  Variables: {
-    userId: string;
-    login: string;
-    avatarUrl: string;
-  };
-}
-
-const SESSION_COOKIE_REGEX = /__session=([^;]+)/;
-
-export const authMiddleware = createMiddleware<Env>(async (c, next) => {
+export const authMiddleware = createMiddleware<WorkerEnv>(async (c, next) => {
   const sessionCookie = c.req
     .header("cookie")
     ?.match(SESSION_COOKIE_REGEX)?.[1];

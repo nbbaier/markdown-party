@@ -11,14 +11,6 @@ import "./doc-page.css";
 
 type ViewState = "loading" | "not-found" | "editor" | "viewer";
 
-interface DocMeta {
-  doc_id: string;
-  owner_user_id: string | null;
-  initialized: boolean;
-  created_at: string;
-  last_activity_at: string;
-}
-
 function EditorView({
   docId,
   user,
@@ -104,10 +96,26 @@ function ReadOnlyView({ docId }: { docId: string }) {
   const [rawContent, setRawContent] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/${docId}/raw`)
-      .then((r) => r.text())
-      .then(setRawContent)
-      .catch(() => setRawContent(""));
+    let cancelled = false;
+
+    async function loadRawContent() {
+      try {
+        const response = await fetch(`/${docId}/raw`);
+        const text = await response.text();
+        if (!cancelled) {
+          setRawContent(text);
+        }
+      } catch {
+        if (!cancelled) {
+          setRawContent("");
+        }
+      }
+    }
+
+    loadRawContent();
+    return () => {
+      cancelled = true;
+    };
   }, [docId]);
 
   if (rawContent === null) {
@@ -129,7 +137,6 @@ export function DocPage() {
   const { user, loading: authLoading } = useAuth();
   const { claiming } = useEditToken(docId);
   const [viewState, setViewState] = useState<ViewState>("loading");
-  const [, setMeta] = useState<DocMeta | null>(null);
 
   useEffect(() => {
     if (authLoading || claiming || !docId) {
@@ -158,12 +165,11 @@ export function DocPage() {
           return;
         }
 
-        const metaData = (await metaRes.json()) as DocMeta;
+        await metaRes.json();
         if (cancelled) {
           return;
         }
 
-        setMeta(metaData);
         const canEdit = checkEditCapability();
         setView(canEdit ? "editor" : "viewer");
       } catch {

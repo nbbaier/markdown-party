@@ -1,20 +1,20 @@
 import { Hono } from "hono";
-import { setCookie } from "hono/cookie";
+import { getCookie, setCookie } from "hono/cookie";
 import { encrypt } from "../../shared/encryption";
 import { signJwt, verifyJwt } from "../../shared/jwt";
 import { generateCsrfToken, setCsrfCookie } from "../shared/csrf";
+import type { WorkerEnv } from "../shared/env";
+import { createRateLimitMiddleware } from "../shared/rate-limit";
+import { SESSION_COOKIE_REGEX } from "../shared/session";
 
-interface Env {
-  Bindings: {
-    SESSION_KV: KVNamespace;
-    GITHUB_CLIENT_ID: string;
-    GITHUB_CLIENT_SECRET: string;
-    JWT_SECRET: string;
-    ENCRYPTION_KEY_V1: string;
-  };
-}
-
-const SESSION_COOKIE_REGEX = /__session=([^;]+)/;
+const OAUTH_STATE_COOKIE_NAME = "__oauth_state";
+const GITHUB_LOGIN_REGEX =
+  /^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/;
+const refreshRateLimit = createRateLimitMiddleware({
+  keyPrefix: "auth:refresh",
+  limit: 30,
+  windowSeconds: 60,
+});
 
 function generateState(): string {
   const array = new Uint8Array(32);
@@ -42,7 +42,24 @@ function base64UrlEncode(buffer: Uint8Array): string {
   return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
 
-const authRoutes = new Hono<Env>();
+function isValidGitHubLogin(login: string): boolean {
+  return GITHUB_LOGIN_REGEX.test(login);
+}
+
+function isValidGitHubAvatarUrl(avatarUrl: string): boolean {
+  try {
+    const url = new URL(avatarUrl);
+    return (
+      url.protocol === "https:" &&
+      (url.hostname === "avatars.githubusercontent.com" ||
+        url.hostname.endsWith(".githubusercontent.com"))
+    );
+  } catch {
+    return false;
+  }
+}
+
+const authRoutes = new Hono<WorkerEnv>();
 
 authRoutes.get("/github", async (c) => {
   const state = generateState();
@@ -57,6 +74,14 @@ authRoutes.get("/github", async (c) => {
 
   const origin = new URL(c.req.url).origin;
   const redirectUri = `${origin}/api/auth/github/callback`;
+
+  setCookie(c, OAUTH_STATE_COOKIE_NAME, state, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Lax",
+    path: "/api/auth/github/callback",
+    maxAge: 600,
+  });
 
   const params = new URLSearchParams({
     client_id: c.env.GITHUB_CLIENT_ID,
@@ -80,12 +105,24 @@ authRoutes.get("/github/callback", async (c) => {
     return c.json({ error: "Missing code or state" }, 400);
   }
 
+  const cookieState = getCookie(c, OAUTH_STATE_COOKIE_NAME);
+  if (!(cookieState && cookieState === state)) {
+    return c.json({ error: "Invalid OAuth state binding" }, 400);
+  }
+
   const stateData = await c.env.SESSION_KV.get(`oauth:state:${state}`);
   if (!stateData) {
     return c.json({ error: "Invalid or expired state" }, 400);
   }
 
   await c.env.SESSION_KV.delete(`oauth:state:${state}`);
+  setCookie(c, OAUTH_STATE_COOKIE_NAME, "", {
+    httpOnly: true,
+    secure: true,
+    sameSite: "Lax",
+    path: "/api/auth/github/callback",
+    maxAge: 0,
+  });
 
   const { codeVerifier } = JSON.parse(stateData);
 
@@ -135,6 +172,16 @@ authRoutes.get("/github/callback", async (c) => {
   };
   const { id: userId, login, avatar_url: avatarUrl } = userData;
 
+  if (!isValidGitHubLogin(login)) {
+    return c.json({ error: "Invalid GitHub login in profile response" }, 502);
+  }
+  if (!isValidGitHubAvatarUrl(avatarUrl)) {
+    return c.json(
+      { error: "Invalid GitHub avatar URL in profile response" },
+      502
+    );
+  }
+
   const encryptedToken = await encrypt(tokenData.access_token, {
     currentKey: { version: 1, rawKey: c.env.ENCRYPTION_KEY_V1 },
     previousKeys: [],
@@ -175,7 +222,7 @@ authRoutes.get("/github/callback", async (c) => {
   return c.redirect("/", 302);
 });
 
-authRoutes.post("/refresh", async (c) => {
+authRoutes.post("/refresh", refreshRateLimit, async (c) => {
   const sessionCookie = c.req
     .header("cookie")
     ?.match(SESSION_COOKIE_REGEX)?.[1];

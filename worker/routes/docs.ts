@@ -2,38 +2,16 @@ import { Hono } from "hono";
 import { joyful } from "joyful";
 import { decrypt } from "../../shared/encryption";
 import { verifyJwt } from "../../shared/jwt";
+import type { DocMeta } from "../../src/shared/doc-meta";
 import {
   buildEditCookieAttributes,
   EDIT_COOKIE_TTL,
   signEditCookie,
 } from "../../src/shared/edit-cookie";
 import { authMiddleware } from "../shared/auth-middleware";
-
-interface Env {
-  Bindings: {
-    DOC_ROOM: DurableObjectNamespace;
-    SESSION_KV: KVNamespace;
-    GITHUB_CLIENT_ID: string;
-    GITHUB_CLIENT_SECRET: string;
-    JWT_SECRET: string;
-    ENCRYPTION_KEY_V1: string;
-  };
-  Variables: {
-    userId: string;
-    login: string;
-    avatarUrl: string;
-  };
-}
-
-interface DocMeta {
-  initialized: boolean;
-  docId: string;
-  ownerUserId: string | null;
-  editTokenHash: string;
-  githubBackend: string | null;
-  createdAt: string;
-  lastActivityAt: string;
-}
+import type { WorkerEnv } from "../shared/env";
+import { createRateLimitMiddleware } from "../shared/rate-limit";
+import { SESSION_COOKIE_REGEX } from "../shared/session";
 
 interface GitHubBackend {
   type: "gist";
@@ -54,10 +32,19 @@ interface GistOperationResult {
   etag: string | null;
 }
 
-const SESSION_COOKIE_REGEX = /__session=([^;]+)/;
 const DOC_ID_REGEX = /^[a-z]+-[a-z]+-[a-z]+$/;
 const GIST_ID_REGEX = /^[a-f0-9]+$/i;
 const FILENAME_REGEX = /^[\w\-. ]+$/;
+const createDocRateLimit = createRateLimitMiddleware({
+  keyPrefix: "docs:create",
+  limit: 20,
+  windowSeconds: 60,
+});
+const claimDocRateLimit = createRateLimitMiddleware({
+  keyPrefix: "docs:claim",
+  limit: 30,
+  windowSeconds: 60,
+});
 
 function validateDocId(docId: string): boolean {
   return DOC_ID_REGEX.test(docId);
@@ -144,7 +131,7 @@ function validateGithubLinkBody(body: LinkGithubBody):
 }
 
 async function getGithubAccessToken(
-  env: Env["Bindings"],
+  env: WorkerEnv["Bindings"],
   userId: string
 ): Promise<string | null> {
   const sessionData = await env.SESSION_KV.get(`session:${userId}`);
@@ -227,10 +214,10 @@ function generateDocId(): string {
   return joyful({ segments: 3 });
 }
 
-const docRoutes = new Hono<Env>();
+const docRoutes = new Hono<WorkerEnv>();
 
 // POST /api/docs - Create a new document (no auth required)
-docRoutes.post("/", async (c) => {
+docRoutes.post("/", createDocRateLimit, async (c) => {
   const MAX_ID_RETRIES = 3;
   let docId = "";
 
@@ -303,7 +290,7 @@ docRoutes.post("/", async (c) => {
 });
 
 // POST /api/docs/:doc_id/claim - Exchange edit token for edit cookie
-docRoutes.post("/:doc_id/claim", async (c) => {
+docRoutes.post("/:doc_id/claim", claimDocRateLimit, async (c) => {
   const docId = c.req.param("doc_id");
   if (!validateDocId(docId)) {
     return c.json({ error: "Invalid document ID" }, 400);
@@ -519,9 +506,12 @@ docRoutes.delete("/:doc_id/github", authMiddleware, async (c) => {
 
 // GET /:doc_id/raw - Get raw markdown (non-API route, mounted separately)
 export async function handleRawDoc(
-  c: { env: Env["Bindings"] },
+  c: { env: WorkerEnv["Bindings"] },
   docId: string
 ): Promise<Response> {
+  if (!validateDocId(docId)) {
+    return new Response("Invalid document ID", { status: 400 });
+  }
   const stub = c.env.DOC_ROOM.get(c.env.DOC_ROOM.idFromName(docId));
 
   // Fetch raw markdown from DO
