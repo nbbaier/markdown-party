@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsgo -b && vite build",
     "preview": "vite preview",
     "check": "ultracite check",
     "fix": "ultracite fix",
@@ -52,5 +52,14 @@
     "ultracite": "7.1.4",
     "vite": "^7.2.4",
     "wrangler": "^4.63.0"
+  },
+  "knip": {
+    "entry": [
+      "src/**/*.{ts,tsx}",
+      "worker/**/*.ts"
+    ],
+    "ignoreDependencies": [
+      "@biomejs/biome"
+    ]
   }
 }

@@ -21,14 +21,14 @@ markdown.party is a collaborative markdown editor where anyone can create and ed
 ### Key Components
 
 - **`src/`** — React 19 SPA (Vite):
-  - Milkdown editor with slash commands and floating tooltip
-  - Yjs collaboration via y-partyserver
-  - react-router-dom routing (`/` creates doc, `/:docId` edits)
+   - Milkdown editor with slash commands and floating tooltip
+   - Yjs collaboration via y-partyserver
+   - react-router-dom routing (`/` creates doc, `/:docId` edits)
 
 - **`worker/`** — Cloudflare Worker:
-  - Hono HTTP router (`worker/routes/`)
-  - `DocRoom` Durable Object (`worker/doc-room.ts`) extending YServer for Yjs CRDT sync + DO SQLite persistence
-  - Entry: `worker/index.ts`
+   - Hono HTTP router (`worker/routes/`)
+   - `DocRoom` Durable Object (`worker/doc-room.ts`) extending YServer for Yjs CRDT sync + DO SQLite persistence
+   - Entry: `worker/index.ts`
 
 - **`src/shared/`** and **`worker/shared/`** — shared types/utilities scoped to client and worker respectively
 

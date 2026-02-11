@@ -149,3 +149,137 @@
 .share-row button:hover {
   background: #f3f4f6;
 }
+
+/* GitHub Modal */
+.github-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.github-modal {
+  background: white;
+  border-radius: 8px;
+  padding: 24px;
+  min-width: 400px;
+  max-width: 90vw;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
+.github-modal h3 {
+  margin: 0 0 16px 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #24292e;
+}
+
+.github-modal-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #e1e4e8;
+  padding-bottom: 8px;
+}
+
+.github-modal-tabs button {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #57606a;
+  background: none;
+  border: none;
+  cursor: pointer;
+  border-radius: 6px;
+}
+
+.github-modal-tabs button:hover {
+  background: #f6f8fa;
+  color: #24292e;
+}
+
+.github-modal-tabs button.active {
+  color: #24292e;
+  background: #ddf4ff;
+}
+
+.github-modal-field {
+  margin-bottom: 16px;
+}
+
+.github-modal-field label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #24292e;
+}
+
+.github-modal-field input[type="text"] {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  box-sizing: border-box;
+}
+
+.github-modal-field input[type="checkbox"] {
+  margin-right: 8px;
+}
+
+.github-modal-error {
+  padding: 12px;
+  margin-bottom: 16px;
+  background: #ffebe9;
+  border: 1px solid #ffcdcd;
+  border-radius: 6px;
+  color: #cf222e;
+  font-size: 13px;
+}
+
+.github-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.github-modal-actions button {
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.github-modal-actions button:not(.primary) {
+  color: #24292e;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+}
+
+.github-modal-actions button:not(.primary):hover {
+  background: #f3f4f6;
+}
+
+.github-modal-actions button.primary {
+  color: white;
+  background: #2ea44f;
+  border: 1px solid #2ea44f;
+}
+
+.github-modal-actions button.primary:hover:not(:disabled) {
+  background: #2c974b;
+}
+
+.github-modal-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

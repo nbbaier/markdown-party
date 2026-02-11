@@ -127,7 +127,9 @@ export class DocRoom extends YServer<WorkerEnv> {
     }
   }
 
-  // biome-ignore lint/suspicious/useAwait: Called by framework (TODO: improve this)
+  private syncBackoffAttempt = 0;
+  private syncBackoffTimer: ReturnType<typeof setTimeout> | null = null;
+
   async onSave(): Promise<void> {
     console.log(`[DocRoom ${this.name}] Saving snapshot...`);
 
@@ -141,7 +143,280 @@ export class DocRoom extends YServer<WorkerEnv> {
       this.setMeta(meta);
     }
 
-    // Phase 2: GitHub sync will happen here
+    // Phase 2: GitHub sync
+    await this.syncToGitHub();
+  }
+
+  private async syncToGitHub(): Promise<void> {
+    const meta = this.getMeta();
+    if (!meta?.githubBackend) {
+      return; // No GitHub backend configured
+    }
+
+    // Check if owner is connected
+    const ownerConnection = this.findOwnerConnection();
+    if (!ownerConnection) {
+      this.broadcastSyncStatus("pending-sync");
+      return;
+    }
+
+    // Request canonical markdown from owner
+    const markdown = await this.requestCanonicalMarkdown(ownerConnection);
+    if (!markdown) {
+      console.log(
+        `[DocRoom ${this.name}] No markdown received from owner, skipping GitHub sync`
+      );
+      return;
+    }
+
+    // Sync to GitHub
+    await this.writeToGitHub(meta, markdown);
+  }
+
+  private findOwnerConnection(): Connection | null {
+    for (const [connectionId, caps] of this.connectionCapabilities.entries()) {
+      if (caps.isOwner) {
+        const connection = Array.from(this.getConnections()).find(
+          (c) => c.id === connectionId
+        );
+        if (connection) {
+          return connection;
+        }
+      }
+    }
+    return null;
+  }
+
+  private requestCanonicalMarkdown(
+    connection: Connection
+  ): Promise<string | null> {
+    const requestId = crypto.randomUUID();
+
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        this.pendingMarkdownRequests.delete(requestId);
+        resolve(null);
+      }, 5000);
+
+      this.pendingMarkdownRequests.set(requestId, {
+        resolve: (markdown) => {
+          clearTimeout(timeout);
+          resolve(markdown);
+        },
+        timeout,
+      });
+
+      // Send request to specific connection
+      connection.send(
+        JSON.stringify({
+          type: "request-markdown",
+          payload: { requestId },
+        })
+      );
+    });
+  }
+
+  private async writeToGitHub(
+    meta: DocRoomMeta,
+    markdown: string
+  ): Promise<void> {
+    if (!meta.githubBackend) {
+      return;
+    }
+
+    const backend = JSON.parse(meta.githubBackend) as {
+      type: "gist";
+      gistId: string;
+      filename: string;
+      etag: string | null;
+    };
+
+    if (backend.type !== "gist") {
+      return;
+    }
+
+    const accessToken = await this.getGitHubToken(meta);
+    if (!accessToken) {
+      return;
+    }
+
+    // Build headers for conditional write
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/vnd.github.v3+json",
+      "Content-Type": "application/json",
+      "User-Agent": "markdown.party",
+    };
+
+    if (backend.etag) {
+      headers["If-Match"] = backend.etag;
+    }
+
+    this.broadcastSyncStatus("saving");
+
+    try {
+      const response = await fetch(
+        `https://api.github.com/gists/${backend.gistId}`,
+        {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({
+            files: {
+              [backend.filename]: {
+                content: markdown,
+              },
+            },
+          }),
+        }
+      );
+
+      if (response.status === 412) {
+        await this.handleRemoteChanged(backend, accessToken);
+        return;
+      }
+
+      if (!response.ok) {
+        await this.handleSyncError(response.status);
+        return;
+      }
+
+      // Success
+      this.syncBackoffAttempt = 0;
+
+      const newEtag = response.headers.get("etag");
+      backend.etag = newEtag;
+      meta.githubBackend = JSON.stringify(backend);
+      this.setMeta(meta);
+
+      this.broadcastSyncStatus("saved");
+      console.log(`[DocRoom ${this.name}] GitHub sync successful`);
+    } catch (error) {
+      console.error(`[DocRoom ${this.name}] GitHub sync error:`, error);
+      await this.scheduleRetry();
+    }
+  }
+
+  private async getGitHubToken(meta: DocRoomMeta): Promise<string | null> {
+    if (!meta.ownerUserId) {
+      return null;
+    }
+
+    const sessionData = await this.env.SESSION_KV.get(
+      `session:${meta.ownerUserId}`
+    );
+    if (!sessionData) {
+      this.broadcastSyncStatus("pending-sync", "Owner session expired");
+      return null;
+    }
+
+    const { encryptedToken } = JSON.parse(sessionData) as {
+      encryptedToken: string;
+    };
+    const { decrypt } = await import("./shared/encryption");
+    return decrypt(encryptedToken, {
+      currentKey: { version: 1, rawKey: this.env.ENCRYPTION_KEY_V1 },
+      previousKeys: [],
+    });
+  }
+
+  private async handleRemoteChanged(
+    backend: { type: "gist"; gistId: string; filename: string },
+    accessToken: string
+  ): Promise<void> {
+    console.log(`[DocRoom ${this.name}] GitHub 412 - remote changed`);
+
+    const remoteRes = await fetch(
+      `https://api.github.com/gists/${backend.gistId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "markdown.party",
+        },
+      }
+    );
+
+    if (remoteRes.ok) {
+      const remoteData = (await remoteRes.json()) as {
+        files: Record<string, { content: string }>;
+      };
+      const remoteMarkdown = remoteData.files[backend.filename]?.content ?? "";
+
+      this.broadcastMessage({
+        type: "remote-changed",
+        payload: { remoteMarkdown },
+      });
+    }
+
+    this.syncBackoffAttempt = 0;
+  }
+
+  private handleSyncError(status: number): void {
+    const isRetryable = status === 403 || status === 429 || status >= 500;
+
+    if (!isRetryable || this.syncBackoffAttempt >= 5) {
+      console.log(
+        `[DocRoom ${this.name}] GitHub sync failed permanently: ${status}`
+      );
+      this.broadcastSyncStatus("error-retrying", `GitHub error: ${status}`);
+      return;
+    }
+
+    this.syncBackoffAttempt++;
+    const delay = Math.min(30_000, 2 ** this.syncBackoffAttempt * 1000);
+    const nextRetryAt = Date.now() + delay;
+
+    console.log(
+      `[DocRoom ${this.name}] GitHub sync failed (${status}), retrying in ${delay}ms (attempt ${this.syncBackoffAttempt})`
+    );
+
+    this.broadcastMessage({
+      type: "error-retrying",
+      payload: { attempt: this.syncBackoffAttempt, nextRetryAt },
+    });
+
+    if (this.syncBackoffTimer) {
+      clearTimeout(this.syncBackoffTimer);
+    }
+    this.syncBackoffTimer = setTimeout(() => {
+      this.syncToGitHub();
+    }, delay);
+  }
+
+  private scheduleRetry(): void {
+    if (this.syncBackoffAttempt >= 5) {
+      return;
+    }
+
+    this.syncBackoffAttempt++;
+    const delay = Math.min(30_000, 2 ** this.syncBackoffAttempt * 1000);
+    const nextRetryAt = Date.now() + delay;
+
+    this.broadcastMessage({
+      type: "error-retrying",
+      payload: { attempt: this.syncBackoffAttempt, nextRetryAt },
+    });
+
+    if (this.syncBackoffTimer) {
+      clearTimeout(this.syncBackoffTimer);
+    }
+    this.syncBackoffTimer = setTimeout(() => {
+      this.syncToGitHub();
+    }, delay);
+  }
+
+  private broadcastSyncStatus(state: string, detail?: string): void {
+    this.broadcastMessage({
+      type: "sync-status",
+      payload: { state, detail },
+    });
+  }
+
+  private broadcastMessage(message: unknown): void {
+    const msg = JSON.stringify(message);
+    for (const connection of this.getConnections()) {
+      connection.send(msg);
+    }
   }
 
   async onConnect(
@@ -207,7 +482,6 @@ export class DocRoom extends YServer<WorkerEnv> {
     }
   }
 
-  // biome-ignore lint/suspicious/useAwait: Called by framework (TODO: improve this)
   async onMessage(
     connection: Connection,
     message: string | ArrayBuffer
@@ -242,8 +516,22 @@ export class DocRoom extends YServer<WorkerEnv> {
             this.handleCanonicalMarkdown(connection, customMessage.payload);
             break;
           }
+          case "push-local": {
+            // Owner chooses to push local state to GitHub (force overwrite)
+            if (caps.isOwner) {
+              this.handlePushLocal();
+            }
+            break;
+          }
+          case "discard-local": {
+            // Owner chooses to discard local and reload from GitHub
+            if (caps.isOwner) {
+              await this.handleDiscardLocal();
+            }
+            break;
+          }
           default: {
-            // Ignore other message types in Phase 1
+            // Ignore other message types
             break;
           }
         }
@@ -277,6 +565,14 @@ export class DocRoom extends YServer<WorkerEnv> {
 
     if (path === "/update-token" && req.method === "POST") {
       return this.handleUpdateTokenRequest(req);
+    }
+
+    if (path === "/update-github" && req.method === "POST") {
+      return this.handleUpdateGitHubRequest(req);
+    }
+
+    if (path === "/raw" && req.method === "GET") {
+      return this.handleRawRequest();
     }
 
     return new Response("Not found", { status: 404 });
@@ -366,6 +662,35 @@ export class DocRoom extends YServer<WorkerEnv> {
     });
   }
 
+  private async handleUpdateGitHubRequest(req: Request): Promise<Response> {
+    const body = (await req.json()) as {
+      githubBackend: {
+        type: "gist";
+        gistId: string;
+        filename: string;
+        etag: string | null;
+      } | null;
+    };
+    const meta = this.getMeta();
+
+    if (!meta) {
+      return new Response(JSON.stringify({ error: "Not initialized" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    meta.githubBackend = body.githubBackend
+      ? JSON.stringify(body.githubBackend)
+      : null;
+    this.setMeta(meta);
+
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+
   // ============================================================================
   // Database / Storage
   // ============================================================================
@@ -381,6 +706,13 @@ export class DocRoom extends YServer<WorkerEnv> {
       CREATE TABLE IF NOT EXISTS yjs_snapshot (
         id INTEGER PRIMARY KEY,
         data BLOB,
+        updated_at TEXT
+      )
+    `);
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS canonical_markdown (
+        id INTEGER PRIMARY KEY,
+        content TEXT,
         updated_at TEXT
       )
     `);
@@ -440,6 +772,40 @@ export class DocRoom extends YServer<WorkerEnv> {
        VALUES (1, ?, datetime('now'))`,
       data
     );
+  }
+
+  private saveCanonicalMarkdown(content: string): void {
+    this.ctx.storage.sql.exec(
+      `INSERT OR REPLACE INTO canonical_markdown (id, content, updated_at) 
+       VALUES (1, ?, datetime('now'))`,
+      content
+    );
+  }
+
+  private loadCanonicalMarkdown(): string | null {
+    try {
+      const result = this.ctx.storage.sql.exec(
+        "SELECT content FROM canonical_markdown WHERE id = 1"
+      );
+      const row = result.one() as { content: string } | null;
+      return row?.content ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  private handleRawRequest(): Response {
+    const meta = this.getMeta();
+    if (!meta?.initialized) {
+      return new Response("Not found", { status: 404 });
+    }
+
+    const markdown = this.loadCanonicalMarkdown();
+
+    return new Response(markdown ?? "", {
+      status: 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+    });
   }
 
   // ============================================================================
@@ -537,6 +903,9 @@ export class DocRoom extends YServer<WorkerEnv> {
     _connection: Connection,
     payload: CanonicalMarkdownPayload
   ): void {
+    // Save the canonical markdown for raw endpoint
+    this.saveCanonicalMarkdown(payload.markdown);
+
     const pending = this.pendingMarkdownRequests.get(payload.requestId);
     if (pending) {
       clearTimeout(pending.timeout);
@@ -546,5 +915,93 @@ export class DocRoom extends YServer<WorkerEnv> {
       );
       pending.resolve(payload.markdown);
     }
+  }
+
+  private handlePushLocal(): void {
+    // Clear etag to force overwrite on next save
+    const meta = this.getMeta();
+    if (meta?.githubBackend) {
+      const backend = JSON.parse(meta.githubBackend) as {
+        type: "gist";
+        gistId: string;
+        filename: string;
+        etag: string | null;
+      };
+      backend.etag = null; // Clear etag to skip conditional write
+      meta.githubBackend = JSON.stringify(backend);
+      this.setMeta(meta);
+      console.log(`[DocRoom ${this.name}] Cleared etag for force push`);
+    }
+
+    // Trigger immediate sync
+    this.syncBackoffAttempt = 0;
+    this.syncToGitHub();
+  }
+
+  private async handleDiscardLocal(): Promise<void> {
+    const meta = this.getMeta();
+    if (!(meta?.githubBackend && meta.ownerUserId)) {
+      return;
+    }
+
+    const backend = JSON.parse(meta.githubBackend) as {
+      type: "gist";
+      gistId: string;
+      filename: string;
+      etag: string | null;
+    };
+
+    // Fetch remote content
+    const sessionData = await this.env.SESSION_KV.get(
+      `session:${meta.ownerUserId}`
+    );
+    if (!sessionData) {
+      return;
+    }
+
+    const { encryptedToken } = JSON.parse(sessionData) as {
+      encryptedToken: string;
+    };
+    const { decrypt } = await import("./shared/encryption");
+    const accessToken = await decrypt(encryptedToken, {
+      currentKey: { version: 1, rawKey: this.env.ENCRYPTION_KEY_V1 },
+      previousKeys: [],
+    });
+
+    const remoteRes = await fetch(
+      `https://api.github.com/gists/${backend.gistId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/vnd.github.v3+json",
+          "User-Agent": "markdown.party",
+        },
+      }
+    );
+
+    if (!remoteRes.ok) {
+      return;
+    }
+
+    const remoteData = (await remoteRes.json()) as {
+      files: Record<string, { content: string }>;
+    };
+    const remoteMarkdown = remoteData.files[backend.filename]?.content ?? "";
+
+    // Update etag
+    const newEtag = remoteRes.headers.get("etag");
+    backend.etag = newEtag;
+    meta.githubBackend = JSON.stringify(backend);
+    this.setMeta(meta);
+
+    // Broadcast reload-remote to all clients
+    this.broadcastMessage({
+      type: "reload-remote",
+      payload: { markdown: remoteMarkdown },
+    });
+
+    console.log(
+      `[DocRoom ${this.name}] Discarded local, reloading from remote`
+    );
   }
 }
