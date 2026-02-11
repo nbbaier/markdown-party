@@ -93,15 +93,29 @@ The project uses TypeScript project references for proper incremental builds acr
 
 To enable GitHub authentication and Gist persistence, configure the following:
 
-### 1. Create a GitHub OAuth Application
+### 1. Create GitHub OAuth Applications
+
+You need to create separate OAuth apps for development and production (GitHub only allows one callback URL per app).
+
+#### Development App
+
+1. Go to your GitHub account → Settings → Developer settings → OAuth Apps
+2. Click "New OAuth App"
+3. Fill in the form:
+   - **Application name**: markdown.party dev (or your preferred dev name)
+   - **Homepage URL**: `http://localhost:8787`
+   - **Authorization callback URL**: `http://localhost:8787/api/auth/github/callback`
+4. Copy the **Client ID** and **Client Secret** for use in your local `.dev.vars` file
+
+#### Production App
 
 1. Go to your GitHub account → Settings → Developer settings → OAuth Apps
 2. Click "New OAuth App"
 3. Fill in the form:
    - **Application name**: markdown.party (or your preferred name)
-   - **Homepage URL**: `https://markdown.party` (or your local dev URL)
+   - **Homepage URL**: `https://markdown.party` (or your custom domain)
    - **Authorization callback URL**: `https://markdown.party/api/auth/github/callback`
-4. Copy the **Client ID** and **Client Secret**
+4. Copy the **Client ID** and **Client Secret** for use in production secrets
 
 ### 2. Configure Environment Variables
 
