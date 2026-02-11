@@ -56,7 +56,7 @@ function ToolbarAction({ onClick, tooltip, children }: {
 }
 ```
 
-### 2. `isValidLinkUrl` allows protocol-relative URL bypass
+### 2. ~~`isValidLinkUrl` allows protocol-relative URL bypass~~ (RESOLVED in `f776811`)
 
 **File:** `src/components/link-dialog.tsx:13-21`
 **Flagged by:** security-sentinel
@@ -87,7 +87,7 @@ function isValidLinkUrl(url: string): boolean {
 
 ## P2 — Important (Should Fix)
 
-### 3. `onSubmit` type includes `null` but null is never passed
+### 3. ~~`onSubmit` type includes `null` but null is never passed~~ (RESOLVED in `c1280bf`)
 
 **File:** `src/components/link-dialog.tsx:27`, `src/components/toolbar.tsx:112-115`
 **Flagged by:** kieran-typescript-reviewer
@@ -96,7 +96,7 @@ function isValidLinkUrl(url: string): boolean {
 
 **Fix:** Narrow to `onSubmit: (url: string) => void` and remove the `null` guard in `handleLinkSubmit`.
 
-### 4. Unused `inputRef` in LinkDialog
+### 4. ~~Unused `inputRef` in LinkDialog~~ (RESOLVED in `c1280bf`)
 
 **File:** `src/components/link-dialog.tsx:38`
 **Flagged by:** kieran-typescript-reviewer, code-simplicity-reviewer, pattern-recognition-specialist
@@ -105,7 +105,7 @@ function isValidLinkUrl(url: string): boolean {
 
 **Fix:** Remove the ref and the `useRef` import, or use it to auto-focus the input on dialog open.
 
-### 5. `radix-ui` barrel import risks bundle bloat
+### 5. ~~`radix-ui` barrel import risks bundle bloat~~ (RESOLVED in `c1280bf`)
 
 **File:** All `src/components/ui/*.tsx` files
 **Flagged by:** performance-oracle
@@ -122,7 +122,7 @@ import { Tooltip as TooltipPrimitive } from "radix-ui";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 ```
 
-### 6. Inline button styles in LinkDialog — no Button component
+### 6. ~~Inline button styles in LinkDialog — no Button component~~ (RESOLVED in `c1280bf`)
 
 **File:** `src/components/link-dialog.tsx:91-115`
 **Flagged by:** kieran-typescript-reviewer, architecture-strategist, pattern-recognition-specialist
@@ -131,7 +131,7 @@ Three buttons use long, duplicated inline Tailwind class strings. The project al
 
 **Fix:** Add the shadcn Button component (`npx shadcn add button`) and use it in the dialog footer.
 
-### 7. Missing `rel="noopener noreferrer"` on Link extension config
+### 7. ~~Missing `rel="noopener noreferrer"` on Link extension config~~ (RESOLVED in `c1280bf`)
 
 **File:** `src/components/editor.tsx:68-71`
 **Flagged by:** security-sentinel
@@ -154,7 +154,7 @@ Link.configure({
 
 ## P3 — Nice-to-Have
 
-### 8. `"use client"` directives are no-ops in Vite SPA
+### 8. ~~`"use client"` directives are no-ops in Vite SPA~~ (RESOLVED in `29d94b2`)
 
 **Files:** `src/components/ui/dialog.tsx:1`, `src/components/ui/separator.tsx:1`
 **Flagged by:** kieran-typescript-reviewer, architecture-strategist, pattern-recognition-specialist
@@ -163,7 +163,7 @@ These are Next.js Server Component directives that have no effect in a Vite SPA.
 
 **Fix:** Remove them, or leave if a framework migration is planned.
 
-### 9. Default exports instead of named exports
+### 9. ~~Default exports instead of named exports~~ (RESOLVED in `29d94b2`)
 
 **Files:** `src/components/toolbar.tsx:82`, `src/components/link-dialog.tsx:30`
 **Flagged by:** kieran-typescript-reviewer
@@ -172,7 +172,7 @@ AGENTS.md and the shadcn/ui components all favor named exports. The two applicat
 
 **Fix:** Switch to named exports and update import sites.
 
-### 10. `LinkDialog` rendered inside `TooltipProvider` scope
+### 10. ~~`LinkDialog` rendered inside `TooltipProvider` scope~~ (RESOLVED in `29d94b2`)
 
 **File:** `src/components/toolbar.tsx:278-286`
 **Flagged by:** kieran-typescript-reviewer, performance-oracle
@@ -181,7 +181,7 @@ The dialog is a sibling to the toolbar div inside `TooltipProvider`. The dialog 
 
 **Fix:** Move `LinkDialog` outside `TooltipProvider` using a Fragment wrapper.
 
-### 11. Unused CSS theme variables from shadcn scaffolding
+### 11. ~~Unused CSS theme variables from shadcn scaffolding~~ (RESOLVED in `29d94b2`)
 
 **File:** `src/index.css:147-255`
 **Flagged by:** kieran-typescript-reviewer, architecture-strategist
