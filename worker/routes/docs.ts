@@ -42,6 +42,18 @@ interface GitHubBackend {
   etag: string | null;
 }
 
+interface LinkGithubBody {
+  gist_id?: string;
+  filename?: string;
+  public?: boolean;
+}
+
+interface GistOperationResult {
+  gistId: string;
+  filename: string;
+  etag: string | null;
+}
+
 const SESSION_COOKIE_REGEX = /__session=([^;]+)/;
 const DOC_ID_REGEX = /^[a-z]+-[a-z]+-[a-z]+$/;
 const GIST_ID_REGEX = /^[a-f0-9]+$/i;
@@ -57,6 +69,26 @@ function validateGistId(gistId: string): boolean {
 
 function validateFilename(filename: string): boolean {
   return FILENAME_REGEX.test(filename);
+}
+
+function githubHeaders(
+  accessToken: string,
+  includeJsonContentType = false
+): HeadersInit {
+  if (includeJsonContentType) {
+    return {
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/vnd.github.v3+json",
+      "Content-Type": "application/json",
+      "User-Agent": "markdown.party",
+    };
+  }
+
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: "application/vnd.github.v3+json",
+    "User-Agent": "markdown.party",
+  };
 }
 
 function createDoRequest(
@@ -88,6 +120,106 @@ async function generateEditToken(): Promise<{ token: string; hash: string }> {
     .join("");
 
   return { token, hash };
+}
+
+function validateGithubLinkBody(body: LinkGithubBody):
+  | {
+      gistId?: string;
+      filename: string;
+    }
+  | {
+      error: string;
+    } {
+  const gistId = body.gist_id;
+  const filename = body.filename ?? "document.md";
+
+  if (gistId && !validateGistId(gistId)) {
+    return { error: "Invalid gist ID format" };
+  }
+  if (!validateFilename(filename)) {
+    return { error: "Invalid filename" };
+  }
+
+  return { gistId, filename };
+}
+
+async function getGithubAccessToken(
+  env: Env["Bindings"],
+  userId: string
+): Promise<string | null> {
+  const sessionData = await env.SESSION_KV.get(`session:${userId}`);
+  if (!sessionData) {
+    return null;
+  }
+
+  const { encryptedToken } = JSON.parse(sessionData) as {
+    encryptedToken: string;
+  };
+
+  return decrypt(encryptedToken, {
+    currentKey: { version: 1, rawKey: env.ENCRYPTION_KEY_V1 },
+    previousKeys: [],
+  });
+}
+
+async function fetchExistingGist(
+  accessToken: string,
+  gistId: string,
+  requestedFilename?: string
+): Promise<GistOperationResult | null> {
+  const gistRes = await fetch(`https://api.github.com/gists/${gistId}`, {
+    headers: githubHeaders(accessToken),
+  });
+
+  if (!gistRes.ok) {
+    return null;
+  }
+
+  const gistData = (await gistRes.json()) as {
+    files: Record<string, { content: string }>;
+  };
+  const fileNames = Object.keys(gistData.files);
+  if (!requestedFilename && fileNames.length === 0) {
+    return null;
+  }
+
+  return {
+    gistId,
+    filename: requestedFilename ?? fileNames[0] ?? "document.md",
+    etag: gistRes.headers.get("etag"),
+  };
+}
+
+async function createNewGist(
+  accessToken: string,
+  filename: string,
+  isPublic: boolean
+): Promise<GistOperationResult | null> {
+  const createRes = await fetch("https://api.github.com/gists", {
+    method: "POST",
+    headers: githubHeaders(accessToken, true),
+    body: JSON.stringify({
+      description: "Created with markdown.party",
+      public: isPublic,
+      files: {
+        [filename]: {
+          content: "",
+        },
+      },
+    }),
+  });
+
+  if (!createRes.ok) {
+    return null;
+  }
+
+  const createData = (await createRes.json()) as { id: string };
+
+  return {
+    gistId: createData.id,
+    filename,
+    etag: createRes.headers.get("etag"),
+  };
 }
 
 function generateDocId(): string {
@@ -287,11 +419,7 @@ docRoutes.post("/:doc_id/github", authMiddleware, async (c) => {
     return c.json({ error: "Invalid document ID" }, 400);
   }
   const userId = c.get("userId");
-  const body = await c.req.json<{
-    gist_id?: string;
-    filename?: string;
-    public?: boolean;
-  }>();
+  const body = await c.req.json<LinkGithubBody>();
 
   const stub = c.env.DOC_ROOM.get(c.env.DOC_ROOM.idFromName(docId));
   const metaRes = await stub.fetch(createDoRequest(docId, "/meta"));
@@ -304,95 +432,43 @@ docRoutes.post("/:doc_id/github", authMiddleware, async (c) => {
     return c.json({ error: "Forbidden" }, 403);
   }
 
-  // Get user's GitHub token from KV
-  const sessionData = await c.env.SESSION_KV.get(`session:${userId}`);
-  if (!sessionData) {
+  const accessToken = await getGithubAccessToken(c.env, userId);
+  if (!accessToken) {
     return c.json({ error: "Session expired" }, 401);
   }
 
-  const { encryptedToken } = JSON.parse(sessionData) as {
-    encryptedToken: string;
-  };
-  const accessToken = await decrypt(encryptedToken, {
-    currentKey: { version: 1, rawKey: c.env.ENCRYPTION_KEY_V1 },
-    previousKeys: [],
-  });
-
-  let gistId = body.gist_id;
-  let filename = body.filename ?? "document.md";
-
-  if (gistId && !validateGistId(gistId)) {
-    return c.json({ error: "Invalid gist ID format" }, 400);
-  }
-  if (!validateFilename(filename)) {
-    return c.json({ error: "Invalid filename" }, 400);
+  const validatedLink = validateGithubLinkBody(body);
+  if ("error" in validatedLink) {
+    return c.json({ error: validatedLink.error }, 400);
   }
 
-  let etag: string | null = null;
+  const gistResult = validatedLink.gistId
+    ? await fetchExistingGist(accessToken, validatedLink.gistId, body.filename)
+    : await createNewGist(
+        accessToken,
+        validatedLink.filename,
+        body.public ?? false
+      );
 
-  if (gistId) {
-    // Link to existing Gist - fetch to verify and get etag
-    const gistRes = await fetch(`https://api.github.com/gists/${gistId}`, {
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/vnd.github.v3+json",
-        "User-Agent": "markdown.party",
+  if (!gistResult) {
+    if (validatedLink.gistId && !body.filename) {
+      return c.json({ error: "Gist has no files" }, 400);
+    }
+    return c.json(
+      {
+        error: validatedLink.gistId
+          ? "Failed to fetch Gist"
+          : "Failed to create Gist",
       },
-    });
-
-    if (!gistRes.ok) {
-      return c.json({ error: "Failed to fetch Gist" }, 400);
-    }
-
-    const gistData = (await gistRes.json()) as {
-      id: string;
-      files: Record<string, { content: string }>;
-    };
-    etag = gistRes.headers.get("etag");
-
-    // Use first file if no filename specified
-    if (!body.filename) {
-      const fileNames = Object.keys(gistData.files);
-      if (fileNames.length === 0) {
-        return c.json({ error: "Gist has no files" }, 400);
-      }
-      filename = fileNames[0] ?? "document.md";
-    }
-  } else {
-    // Create new Gist
-    const createRes = await fetch("https://api.github.com/gists", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${accessToken}`,
-        Accept: "application/vnd.github.v3+json",
-        "Content-Type": "application/json",
-        "User-Agent": "markdown.party",
-      },
-      body: JSON.stringify({
-        description: "Created with markdown.party",
-        public: body.public ?? false,
-        files: {
-          [filename]: {
-            content: "", // Empty initially - content will be synced on save
-          },
-        },
-      }),
-    });
-
-    if (!createRes.ok) {
-      return c.json({ error: "Failed to create Gist" }, 500);
-    }
-
-    const createData = (await createRes.json()) as { id: string };
-    gistId = createData.id;
-    etag = createRes.headers.get("etag");
+      validatedLink.gistId ? 400 : 500
+    );
   }
 
   const backend: GitHubBackend = {
     type: "gist",
-    gistId: gistId ?? "",
-    filename,
-    etag,
+    gistId: gistResult.gistId,
+    filename: gistResult.filename,
+    etag: gistResult.etag,
   };
 
   // Update DO metadata
@@ -405,9 +481,9 @@ docRoutes.post("/:doc_id/github", authMiddleware, async (c) => {
   );
 
   return c.json({
-    gist_id: gistId,
-    filename,
-    gist_url: `https://gist.github.com/${gistId}`,
+    gist_id: gistResult.gistId,
+    filename: gistResult.filename,
+    gist_url: `https://gist.github.com/${gistResult.gistId}`,
   });
 });
 
