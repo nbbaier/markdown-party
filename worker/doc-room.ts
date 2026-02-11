@@ -65,12 +65,17 @@ export class DocRoom extends YServer<WorkerBindings> {
   // Lifecycle Methods
   // ============================================================================
 
-  // biome-ignore lint/suspicious/useAwait: Called by framework
   async onStart(): Promise<void> {
+    console.log(`[DocRoom] onStart called for room: ${this.name}`);
     this.ensureSchema();
+    await super.onStart();
+    console.log(
+      `[DocRoom] onStart complete, meta initialized: ${this.meta?.initialized ?? false}`
+    );
   }
 
   async onLoad(): Promise<void> {
+    console.log(`[DocRoom] onLoad called for room: ${this.name}`);
     this.pendingMarkdownRequests.clear();
     this.connectionCapabilities.clear();
     this.liveConnections.clear();
@@ -79,13 +84,15 @@ export class DocRoom extends YServer<WorkerBindings> {
 
     this.ensureSchema();
     this.loadMeta();
+    console.log(`[DocRoom] onLoad meta: ${JSON.stringify(this.meta)}`);
 
     const snapshot = this.loadSnapshot();
+    console.log(`[DocRoom] onLoad snapshot exists: ${snapshot !== null}`);
+    await this.checkAndScheduleTtlAlarm();
+
     if (snapshot) {
       Y.applyUpdate(this.document, snapshot.data);
     }
-
-    await this.checkAndScheduleTtlAlarm();
   }
 
   async alarm(): Promise<void> {
@@ -386,14 +393,23 @@ export class DocRoom extends YServer<WorkerBindings> {
     connection: Connection,
     ctx: ConnectionContext
   ): Promise<void> {
+    console.log(
+      `[DocRoom] onConnect called, connection: ${connection.id}, room: ${this.name}`
+    );
     const currentConnections = this.liveConnections.size;
     if (currentConnections >= DocRoom.MAX_CONNECTIONS) {
+      console.log(
+        `[DocRoom] onConnect rejected: room at capacity (${currentConnections})`
+      );
       connection.close(4005, "Room is at capacity");
       return;
     }
 
     const meta = this.getMeta();
     if (!meta?.initialized) {
+      console.log(
+        `[DocRoom] onConnect rejected: room not initialized, meta: ${JSON.stringify(meta)}`
+      );
       connection.close(4004, "Room not initialized");
       return;
     }
@@ -402,6 +418,9 @@ export class DocRoom extends YServer<WorkerBindings> {
       this.checkEditCapability(ctx),
       this.checkOwner(ctx),
     ]);
+    console.log(
+      `[DocRoom] onConnect capabilities: canEdit=${canEdit}, isOwner=${isOwner}`
+    );
     this.liveConnections.set(connection.id, connection);
     this.connectionCapabilities.set(connection.id, { canEdit, isOwner });
     if (isOwner) {
@@ -413,19 +432,30 @@ export class DocRoom extends YServer<WorkerBindings> {
       meta.lastActivityAt = new Date().toISOString();
       this.setMeta(meta);
     }
+
+    // Initialize Yjs sync protocol
+    console.log("[DocRoom] onConnect calling super.onConnect for Yjs sync");
+    super.onConnect(connection, ctx);
+    console.log("[DocRoom] onConnect complete");
   }
 
   async onClose(
     connection: Connection,
-    _code: number,
-    _reason: string,
-    _wasClean: boolean
+    code: number,
+    reason: string,
+    wasClean: boolean
   ): Promise<void> {
+    console.log(
+      `[DocRoom] onClose called, connection: ${connection.id}, code: ${code}, reason: ${reason}`
+    );
     this.liveConnections.delete(connection.id);
     this.connectionCapabilities.delete(connection.id);
     if (this.ownerConnectionId === connection.id) {
       this.ownerConnectionId = null;
     }
+
+    // Clean up Yjs connection state
+    super.onClose(connection, code, reason, wasClean);
 
     // Schedule TTL check when last connection leaves for anonymous docs
     const meta = this.getMeta();
@@ -443,6 +473,10 @@ export class DocRoom extends YServer<WorkerBindings> {
         ? new TextEncoder().encode(message).length
         : message.byteLength;
 
+    console.log(
+      `[DocRoom] onMessage from ${connection.id}, type: ${typeof message}, bytes: ${messageBytes}`
+    );
+
     if (messageBytes > DocRoom.MAX_MESSAGE_SIZE) {
       connection.close(4009, "Message too large");
       return;
@@ -451,10 +485,13 @@ export class DocRoom extends YServer<WorkerBindings> {
     // Only edit-capable connections can send messages
     const caps = this.connectionCapabilities.get(connection.id);
     if (!caps?.canEdit) {
+      console.log(
+        `[DocRoom] onMessage rejected: connection ${connection.id} has no edit capability`
+      );
       return;
     }
 
-    // Handle custom messages
+    // Handle custom string messages
     if (typeof message === "string") {
       try {
         const customMessage = decodeMessage(message);
@@ -493,7 +530,11 @@ export class DocRoom extends YServer<WorkerBindings> {
           `Message processing failed: ${errorMessage}`
         );
       }
+      return;
     }
+
+    // Delegate binary Yjs protocol messages to YServer
+    super.onMessage(connection, message);
   }
 
   // ============================================================================
@@ -504,6 +545,9 @@ export class DocRoom extends YServer<WorkerBindings> {
   async onRequest(req: Request): Promise<Response> {
     const url = new URL(req.url);
     const path = url.pathname;
+    console.log(
+      `[DocRoom] onRequest: ${req.method} ${path}, room: ${this.name}`
+    );
 
     // Route to appropriate handler
     if (path === "/meta") {
@@ -580,6 +624,9 @@ export class DocRoom extends YServer<WorkerBindings> {
     };
 
     this.setMeta(newMeta);
+    console.log(
+      `[DocRoom] handleInitializeRequest success, docId: ${body.docId}`
+    );
 
     return new Response(JSON.stringify({ ok: true }), {
       status: 200,

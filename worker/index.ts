@@ -58,11 +58,21 @@ app.get("/:doc_id/raw", async (c) => {
 });
 
 app.all("/parties/*", async (c) => {
+  const url = new URL(c.req.url);
+  const isUpgrade = c.req.header("upgrade")?.toLowerCase() === "websocket";
+  console.log(
+    `[Worker] /parties/* hit: ${url.pathname}, isWebSocket: ${isUpgrade}`
+  );
   const response = await routePartykitRequest(c.req.raw, c.env);
   if (response) {
+    console.log(`[Worker] /parties/* response status: ${response.status}`);
     return response;
   }
+  console.log("[Worker] /parties/* no response from routePartykitRequest");
   return c.text("Not Found", 404);
 });
+
+// SPA fallback: serve index.html for all unmatched routes
+app.all("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 
 export default app;

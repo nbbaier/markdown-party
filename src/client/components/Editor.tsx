@@ -1,5 +1,6 @@
 import {
   defaultValueCtx,
+  editorViewOptionsCtx,
   Editor as MilkdownEditor,
   rootCtx,
 } from "@milkdown/core";
@@ -62,6 +63,10 @@ function EditorComponent(
       const editor = MilkdownEditor.make()
         .config((ctx) => {
           ctx.set(rootCtx, container);
+          ctx.update(editorViewOptionsCtx, (prev) => ({
+            ...prev,
+            editable: () => !readonly,
+          }));
           if (defaultValue && !doc) {
             ctx.set(defaultValueCtx, defaultValue);
           }
@@ -87,7 +92,7 @@ function EditorComponent(
 
       return editor;
     },
-    [defaultValue, onChange, doc]
+    [defaultValue, onChange, doc, readonly]
   );
 
   const [loading, getInstance] = useInstance();

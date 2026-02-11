@@ -7,8 +7,8 @@ import {
   MessageTypePushLocal,
 } from "../../shared/messages";
 import { ConflictModal } from "../components/conflict-modal";
-import type { EditorHandle } from "../components/editor";
-import { Editor } from "../components/editor";
+import type { EditorHandle } from "../components/Editor";
+import { Editor } from "../components/Editor";
 import { SyncStatusBar } from "../components/sync-status-bar";
 import { useAuth } from "../contexts/auth-context";
 import { useCollabProvider } from "../hooks/use-collab-provider";

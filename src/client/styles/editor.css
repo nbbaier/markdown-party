@@ -7,6 +7,11 @@
   background: #ffffff;
 }
 
+.editor-container .ProseMirror {
+  min-height: 360px;
+  outline: none;
+}
+
 .editor-container.readonly {
   background: #f6f8fa;
 }

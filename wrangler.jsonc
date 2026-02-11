@@ -7,5 +7,10 @@
     "bindings": [{ "name": "DOC_ROOM", "class_name": "DocRoom" }]
   },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["DocRoom"] }],
-  "kv_namespaces": [{ "binding": "SESSION_KV", "id": "sessions" }]
+  "kv_namespaces": [{ "binding": "SESSION_KV", "id": "sessions" }],
+  "assets": {
+    "directory": "./dist/client",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  }
 }
