@@ -110,11 +110,7 @@ export default function Toolbar({ editor }: ToolbarProps) {
     setLinkDialogOpen(true);
   };
 
-  const handleLinkSubmit = (url: string | null) => {
-    if (url === null) {
-      return;
-    }
-
+  const handleLinkSubmit = (url: string) => {
     if (url === "") {
       editor.chain().focus().extendMarkRange("link").unsetLink().run();
       return;

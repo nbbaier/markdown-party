@@ -68,6 +68,9 @@ export default function Editor() {
       Link.configure({
         openOnClick: false,
         autolink: true,
+        HTMLAttributes: {
+          rel: "noopener noreferrer",
+        },
       }),
       Markdown,
     ],

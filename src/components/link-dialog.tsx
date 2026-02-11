@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +31,7 @@ interface LinkDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   defaultUrl: string;
-  onSubmit: (url: string | null) => void;
+  onSubmit: (url: string) => void;
 }
 
 export default function LinkDialog({
@@ -41,7 +42,6 @@ export default function LinkDialog({
 }: LinkDialogProps) {
   const [url, setUrl] = useState(defaultUrl);
   const [error, setError] = useState("");
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (open) {
@@ -88,37 +88,32 @@ export default function LinkDialog({
                 setError("");
               }}
               placeholder="https://example.com"
-              ref={inputRef}
               value={url}
             />
             {error && <p className="text-destructive text-sm">{error}</p>}
           </div>
           <DialogFooter>
-            <button
-              className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 font-medium text-sm shadow-xs hover:bg-accent hover:text-accent-foreground"
+            <Button
               onClick={() => onOpenChange(false)}
               type="button"
+              variant="outline"
             >
               Cancel
-            </button>
+            </Button>
             {defaultUrl && (
-              <button
-                className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-4 font-medium text-destructive text-sm shadow-xs hover:bg-destructive/10"
+              <Button
+                className="text-destructive hover:bg-destructive/10"
                 onClick={() => {
                   onSubmit("");
                   onOpenChange(false);
                 }}
                 type="button"
+                variant="outline"
               >
                 Remove Link
-              </button>
+              </Button>
             )}
-            <button
-              className="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 font-medium text-primary-foreground text-sm shadow-xs hover:bg-primary/90"
-              type="submit"
-            >
-              Save
-            </button>
+            <Button type="submit">Save</Button>
           </DialogFooter>
         </form>
       </DialogContent>
