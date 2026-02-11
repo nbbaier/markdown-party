@@ -56,6 +56,7 @@ export function useCollabProvider({
   const providerRef = useRef<YProvider | null>(null);
   const docRef = useRef<Doc | null>(null);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only depend on userId to avoid unnecessary reconnects
   useEffect(() => {
     if (!docId) {
       return;
@@ -121,7 +122,7 @@ export function useCollabProvider({
       setAwareness(null);
       setConnectionState("disconnected");
     };
-  }, [docId, user]);
+  }, [docId, user?.userId]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {

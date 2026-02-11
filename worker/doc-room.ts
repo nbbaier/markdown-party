@@ -6,8 +6,11 @@ import { verifyJwt } from "../shared/jwt";
 import { verifyEditCookie } from "../src/shared/edit-cookie";
 import {
   type CanonicalMarkdownPayload,
+  type CustomMessage,
   decodeMessage,
+  encodeMessage,
   MessageTypeCanonicalMarkdown,
+  type SyncState,
 } from "../src/shared/messages";
 
 const EDIT_CAP_REGEXP = /mp_edit_cap=([^;]+)/;
@@ -383,15 +386,15 @@ export class DocRoom extends YServer<WorkerEnv> {
     }, delay);
   }
 
-  private broadcastSyncStatus(state: string, detail?: string): void {
+  private broadcastSyncStatus(state: SyncState, detail?: string): void {
     this.broadcastMessage({
       type: "sync-status",
       payload: { state, detail },
     });
   }
 
-  private broadcastMessage(message: unknown): void {
-    const msg = JSON.stringify(message);
+  private broadcastMessage(message: CustomMessage): void {
+    const msg = encodeMessage(message);
     for (const connection of this.getConnections()) {
       connection.send(msg);
     }
@@ -921,29 +924,15 @@ export class DocRoom extends YServer<WorkerEnv> {
       return;
     }
 
-    const backend = JSON.parse(meta.githubBackend) as {
-      type: "gist";
-      gistId: string;
-      filename: string;
-      etag: string | null;
-    };
-
-    // Fetch remote content
-    const sessionData = await this.env.SESSION_KV.get(
-      `session:${meta.ownerUserId}`
-    );
-    if (!sessionData) {
+    const backend = this.parseGitHubBackend(meta.githubBackend);
+    if (!backend) {
       return;
     }
 
-    const { encryptedToken } = JSON.parse(sessionData) as {
-      encryptedToken: string;
-    };
-    const { decrypt } = await import("../shared/encryption");
-    const accessToken = await decrypt(encryptedToken, {
-      currentKey: { version: 1, rawKey: this.env.ENCRYPTION_KEY_V1 },
-      previousKeys: [],
-    });
+    const accessToken = await this.getGitHubToken(meta);
+    if (!accessToken) {
+      return;
+    }
 
     const remoteRes = await fetch(
       `https://api.github.com/gists/${backend.gistId}`,
