@@ -21,8 +21,8 @@ export function ConflictModal({
       <div className="conflict-modal">
         <h3 className="conflict-title">Conflict Detected</h3>
         <p className="conflict-description">
-          The remote gist has been modified since your last sync. Choose how to
-          resolve:
+          The remote document has been modified since your last sync. Choose how
+          to resolve:
         </p>
 
         <div className="conflict-diff">

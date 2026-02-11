@@ -1,8 +1,8 @@
-export const EDIT_COOKIE_NAME = "gp_edit_cap";
+export const EDIT_COOKIE_NAME = "mp_edit_cap";
 export const EDIT_COOKIE_TTL = 86_400;
 
 export interface EditCookieOptions {
-  gistId: string;
+  docId: string;
 }
 
 export interface EditCookieAttributes {
@@ -15,12 +15,12 @@ export interface EditCookieAttributes {
 }
 
 export interface EditCookiePayload {
-  gistId: string;
+  docId: string;
   expiresAt: number;
 }
 
-export function editCookiePath(gistId: string): string {
-  return `/parties/gist-room/${gistId}`;
+export function editCookiePath(docId: string): string {
+  return `/parties/doc-room/${docId}`;
 }
 
 export function buildEditCookieAttributes(
@@ -28,7 +28,7 @@ export function buildEditCookieAttributes(
 ): EditCookieAttributes {
   return {
     name: EDIT_COOKIE_NAME,
-    path: editCookiePath(options.gistId),
+    path: editCookiePath(options.docId),
     httpOnly: true,
     secure: true,
     sameSite: "Strict",
@@ -75,7 +75,7 @@ export async function signEditCookie(
 
 export async function verifyEditCookie(
   cookieValue: string,
-  gistId: string,
+  docId: string,
   secret: string
 ): Promise<EditCookiePayload | null> {
   try {
@@ -102,7 +102,7 @@ export async function verifyEditCookie(
       new TextDecoder().decode(data)
     );
 
-    if (payload.gistId !== gistId) {
+    if (payload.docId !== docId) {
       return null;
     }
     if (payload.expiresAt < Math.floor(Date.now() / 1000)) {

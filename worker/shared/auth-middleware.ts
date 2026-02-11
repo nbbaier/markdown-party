@@ -3,7 +3,7 @@ import { verifyJwt } from "../../src/shared/jwt";
 
 interface Env {
   Bindings: {
-    GIST_ROOM: DurableObjectNamespace;
+    DOC_ROOM: DurableObjectNamespace;
     SESSION_KV: KVNamespace;
     GITHUB_CLIENT_ID: string;
     GITHUB_CLIENT_SECRET: string;
@@ -32,8 +32,8 @@ export const authMiddleware = createMiddleware<Env>(async (c, next) => {
     const claims = await verifyJwt(sessionCookie, {
       secret: c.env.JWT_SECRET,
       expiresInSeconds: 3600,
-      audience: "gist.party",
-      issuer: "gist.party",
+      audience: "markdown.party",
+      issuer: "markdown.party",
     });
 
     c.set("userId", claims.userId);

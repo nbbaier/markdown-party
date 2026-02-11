@@ -157,8 +157,8 @@ authRoutes.get("/github/callback", async (c) => {
     {
       secret: c.env.JWT_SECRET,
       expiresInSeconds: 3600,
-      audience: "gist.party",
-      issuer: "gist.party",
+      audience: "markdown.party",
+      issuer: "markdown.party",
     }
   );
 
@@ -188,8 +188,8 @@ authRoutes.post("/refresh", async (c) => {
     const payload = await verifyJwt(sessionCookie, {
       secret: c.env.JWT_SECRET,
       expiresInSeconds: 3600,
-      audience: "gist.party",
-      issuer: "gist.party",
+      audience: "markdown.party",
+      issuer: "markdown.party",
     });
 
     const sessionData = await c.env.SESSION_KV.get(`session:${payload.userId}`);
@@ -206,8 +206,8 @@ authRoutes.post("/refresh", async (c) => {
       {
         secret: c.env.JWT_SECRET,
         expiresInSeconds: 3600,
-        audience: "gist.party",
-        issuer: "gist.party",
+        audience: "markdown.party",
+        issuer: "markdown.party",
       }
     );
 
@@ -237,8 +237,8 @@ authRoutes.post("/logout", async (c) => {
       const payload = await verifyJwt(sessionCookie, {
         secret: c.env.JWT_SECRET,
         expiresInSeconds: 3600,
-        audience: "gist.party",
-        issuer: "gist.party",
+        audience: "markdown.party",
+        issuer: "markdown.party",
       });
       await c.env.SESSION_KV.delete(`session:${payload.userId}`);
     } catch {
@@ -270,8 +270,8 @@ authRoutes.get("/me", async (c) => {
     const payload = await verifyJwt(sessionCookie, {
       secret: c.env.JWT_SECRET,
       expiresInSeconds: 3600,
-      audience: "gist.party",
-      issuer: "gist.party",
+      audience: "markdown.party",
+      issuer: "markdown.party",
     });
 
     return c.json({

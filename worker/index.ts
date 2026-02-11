@@ -1,16 +1,16 @@
 import { Hono } from "hono";
 import { routePartykitRequest } from "partyserver";
 
-// biome-ignore lint/performance/noBarrelFile: we need to re-export the GistRoom class
-export { GistRoom } from "./gist-room";
+// biome-ignore lint/performance/noBarrelFile: we need to re-export the DocRoom class
+export { DocRoom } from "./doc-room";
 
 import authRoutes from "./routes/auth";
-import gistRoutes from "./routes/gists";
+import docRoutes, { handleRawDoc } from "./routes/docs";
 import { csrfMiddleware } from "./shared/csrf";
 
 interface Env {
   Bindings: {
-    GIST_ROOM: DurableObjectNamespace;
+    DOC_ROOM: DurableObjectNamespace;
     SESSION_KV: KVNamespace;
     GITHUB_CLIENT_ID: string;
     GITHUB_CLIENT_SECRET: string;
@@ -34,7 +34,7 @@ app.use("*", async (c, next) => {
       "script-src 'self'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' https://avatars.githubusercontent.com data:",
-      "connect-src 'self' wss://*.gist.party wss://localhost:*",
+      "connect-src 'self' wss://*.markdown.party wss://localhost:*",
       "frame-src 'none'",
       "object-src 'none'",
       "base-uri 'self'",
@@ -48,12 +48,19 @@ app.get("/api/health", (c) => {
 });
 
 // CSRF protection on state-changing API routes
-app.use("/api/gists/*", csrfMiddleware);
+app.use("/api/docs/*", csrfMiddleware);
 app.use("/api/auth/logout", csrfMiddleware);
 app.use("/api/auth/refresh", csrfMiddleware);
 
 app.route("/api/auth", authRoutes);
-app.route("/api/gists", gistRoutes);
+app.route("/api/docs", docRoutes);
+
+// Raw markdown endpoint (non-API route)
+// biome-ignore lint/suspicious/useAwait: Hono requires async for route handlers
+app.get("/:doc_id/raw", async (c) => {
+  const docId = c.req.param("doc_id");
+  return handleRawDoc(c, docId);
+});
 
 app.all("/parties/*", async (c) => {
   const response = await routePartykitRequest(c.req.raw, c.env);

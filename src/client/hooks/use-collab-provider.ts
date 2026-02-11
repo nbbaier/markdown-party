@@ -19,7 +19,7 @@ export interface CollabProviderResult {
 }
 
 export interface UseCollabProviderProps {
-  gistId: string | null | undefined;
+  docId: string | null | undefined;
   user?: { userId: string; login: string; avatarUrl: string } | null;
 }
 
@@ -44,7 +44,7 @@ function userColor(userId: string): { color: string; light: string } {
 }
 
 export function useCollabProvider({
-  gistId,
+  docId,
   user,
 }: UseCollabProviderProps): CollabProviderResult {
   const [doc, setDoc] = useState<Doc | null>(null);
@@ -57,7 +57,7 @@ export function useCollabProvider({
   const docRef = useRef<Doc | null>(null);
 
   useEffect(() => {
-    if (!gistId) {
+    if (!docId) {
       return;
     }
 
@@ -65,8 +65,8 @@ export function useCollabProvider({
     docRef.current = ydoc;
     setDoc(ydoc);
 
-    const yProvider = new YProvider(window.location.host, gistId, ydoc, {
-      party: "gist-room",
+    const yProvider = new YProvider(window.location.host, docId, ydoc, {
+      party: "doc-room",
     });
 
     providerRef.current = yProvider;
@@ -96,6 +96,17 @@ export function useCollabProvider({
         color: colors.color,
         colorLight: colors.light,
       });
+    } else {
+      // Anonymous user - assign "Guest N" name with random color
+      const guestNumber = Math.floor(Math.random() * 1000);
+      const guestId = `guest-${guestNumber}-${Date.now()}`;
+      const colors = userColor(guestId);
+      yProvider.awareness.setLocalStateField("user", {
+        name: `Guest ${guestNumber}`,
+        userId: guestId,
+        color: colors.color,
+        colorLight: colors.light,
+      });
     }
 
     yProvider.connect();
@@ -110,7 +121,7 @@ export function useCollabProvider({
       setAwareness(null);
       setConnectionState("disconnected");
     };
-  }, [gistId, user]);
+  }, [docId, user]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {

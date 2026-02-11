@@ -1,0 +1,151 @@
+.header-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: #ffffff;
+  border-bottom: 1px solid #e1e4e8;
+  height: 56px;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.header-logo {
+  font-size: 18px;
+  font-weight: 600;
+  color: #24292e;
+  text-decoration: none;
+}
+
+.header-logo:hover {
+  color: #000;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #24292e;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.2s;
+}
+
+.header-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.header-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.header-btn.header-signin {
+  background: #2ea44f;
+  color: white;
+  border-color: #2ea44f;
+}
+
+.header-btn.header-signin:hover {
+  background: #2c974b;
+}
+
+.header-auth {
+  display: flex;
+  align-items: center;
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid #e1e4e8;
+}
+
+.header-user {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-avatar {
+  border-radius: 50%;
+}
+
+.header-username {
+  font-size: 13px;
+  font-weight: 500;
+  color: #24292e;
+}
+
+.header-popover {
+  position: absolute;
+  top: 48px;
+  right: 16px;
+  background: white;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  z-index: 100;
+  min-width: 320px;
+}
+
+.share-menu {
+  padding: 16px;
+}
+
+.share-section {
+  margin-bottom: 16px;
+}
+
+.share-section:last-child {
+  margin-bottom: 0;
+}
+
+.share-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: #57606a;
+  text-transform: uppercase;
+}
+
+.share-row {
+  display: flex;
+  gap: 8px;
+}
+
+.share-row input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: 13px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  background: #f6f8fa;
+}
+
+.share-row button {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #24292e;
+  background: #f6f8fa;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.share-row button:hover {
+  background: #f3f4f6;
+}

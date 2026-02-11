@@ -5,6 +5,8 @@ import {
 } from "@milkdown/core";
 import { CollabReady, collab, collabServiceCtx } from "@milkdown/plugin-collab";
 import { listener, listenerCtx } from "@milkdown/plugin-listener";
+import { slashFactory } from "@milkdown/plugin-slash";
+import { tooltipFactory } from "@milkdown/plugin-tooltip";
 import { commonmark } from "@milkdown/preset-commonmark";
 import { gfm } from "@milkdown/preset-gfm";
 import {
@@ -75,7 +77,9 @@ function EditorComponent(
         })
         .use(commonmark)
         .use(gfm)
-        .use(listener);
+        .use(listener)
+        .use(slashFactory(""))
+        .use(tooltipFactory(""));
 
       if (doc) {
         editor.use(collab);

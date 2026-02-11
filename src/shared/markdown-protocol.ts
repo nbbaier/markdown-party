@@ -17,7 +17,7 @@
  *
  * 1. DO `onLoad()` finds no Yjs snapshot for an initialized room.
  * 2. DO sends `needs-init` to the first connecting authorized client.
- * 3. Client fetches the Gist content via API, loads it as `defaultValue`.
+ * 3. Client fetches content via API, loads it as `defaultValue`.
  * 4. Yjs updates flow back to the DO naturally.
  *
  * On reload-remote:

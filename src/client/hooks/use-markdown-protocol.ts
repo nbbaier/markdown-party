@@ -14,7 +14,7 @@ import { useCustomMessages } from "./use-custom-messages";
 
 export interface UseMarkdownProtocolProps extends UseCustomMessagesProps {
   getMarkdown: () => string;
-  onNeedsInit?: (gistId: string, filename: string) => void;
+  onNeedsInit?: (docId: string, filename: string) => void;
   onReloadRemote?: (markdown: string) => void;
 }
 
@@ -59,7 +59,9 @@ export function useMarkdownProtocol({
         return;
       }
       const payload = message.payload as NeedsInitPayload;
-      onNeedsInit?.(payload.gistId, payload.filename);
+      // Phase 1: needs-init only fires for GitHub-linked docs
+      // For now, we ignore this message type in anonymous docs
+      onNeedsInit?.(payload.docId, "document.md");
     },
     [onNeedsInit]
   );

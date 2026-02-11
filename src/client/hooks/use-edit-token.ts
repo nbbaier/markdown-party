@@ -9,10 +9,10 @@ export interface UseEditTokenResult {
   claiming: boolean;
 }
 
-export function useEditToken(gistId: string | undefined): UseEditTokenResult {
+export function useEditToken(docId: string | undefined): UseEditTokenResult {
   const [hasEditCapability, setHasEditCapability] = useState(false);
   const [claiming, setClaiming] = useState(() => {
-    if (!gistId) {
+    if (!docId) {
       return false;
     }
     return EDIT_HASH_REGEX.test(window.location.hash);
@@ -20,7 +20,7 @@ export function useEditToken(gistId: string | undefined): UseEditTokenResult {
   const claimedRef = useRef(false);
 
   useEffect(() => {
-    if (!gistId || claimedRef.current) {
+    if (!docId || claimedRef.current) {
       return;
     }
 
@@ -33,7 +33,7 @@ export function useEditToken(gistId: string | undefined): UseEditTokenResult {
     claimedRef.current = true;
     const token = match[1];
 
-    fetchWithCsrf(`/api/gists/${gistId}/claim`, {
+    fetchWithCsrf(`/api/docs/${docId}/claim`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ token }),
@@ -54,7 +54,7 @@ export function useEditToken(gistId: string | undefined): UseEditTokenResult {
         );
         setClaiming(false);
       });
-  }, [gistId]);
+  }, [docId]);
 
   return { hasEditCapability, claiming };
 }

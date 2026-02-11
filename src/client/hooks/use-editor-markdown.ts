@@ -1,5 +1,5 @@
 import { useCallback, useRef } from "react";
-import type { EditorHandle } from "../components/Editor";
+import type { EditorHandle } from "../components/editor";
 
 export function useEditorMarkdown() {
   const editorRef = useRef<EditorHandle>(null);

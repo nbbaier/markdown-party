@@ -1,9 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import {
-  type ConflictPayload,
   type CustomMessage,
   type ErrorRetryingPayload,
-  MessageTypeConflict,
   MessageTypeErrorRetrying,
   MessageTypeRemoteChanged,
   MessageTypeSyncStatus,
@@ -60,19 +58,6 @@ export function useSyncStatus({ provider, getMarkdown }: UseSyncStatusProps) {
     }));
   }, []);
 
-  const handleConflict = useCallback((message: CustomMessage) => {
-    if (message.type !== MessageTypeConflict) {
-      return;
-    }
-    const payload = message.payload as ConflictPayload;
-    setStatus((prev) => ({
-      ...prev,
-      syncState: "conflict" as SyncState,
-      remoteMarkdown: payload.remoteMarkdown,
-      localMarkdown: payload.localMarkdown,
-    }));
-  }, []);
-
   const handleRemoteChanged = useCallback(
     (message: CustomMessage) => {
       if (message.type !== MessageTypeRemoteChanged) {
@@ -93,7 +78,6 @@ export function useSyncStatus({ provider, getMarkdown }: UseSyncStatusProps) {
     const unsubs = [
       on(MessageTypeSyncStatus, handleSyncStatus),
       on(MessageTypeErrorRetrying, handleErrorRetrying),
-      on(MessageTypeConflict, handleConflict),
       on(MessageTypeRemoteChanged, handleRemoteChanged),
     ];
     return () => {
@@ -101,13 +85,7 @@ export function useSyncStatus({ provider, getMarkdown }: UseSyncStatusProps) {
         unsub();
       }
     };
-  }, [
-    on,
-    handleSyncStatus,
-    handleErrorRetrying,
-    handleConflict,
-    handleRemoteChanged,
-  ]);
+  }, [on, handleSyncStatus, handleErrorRetrying, handleRemoteChanged]);
 
   const dismissConflict = useCallback(() => {
     setStatus((prev) => ({
