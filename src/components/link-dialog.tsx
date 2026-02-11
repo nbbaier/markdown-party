@@ -11,12 +11,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
 function isValidLinkUrl(url: string): boolean {
+  const trimmed = url.trim();
+
+  if (trimmed.startsWith("//")) {
+    return false;
+  }
+
   return (
-    url.startsWith("http://") ||
-    url.startsWith("https://") ||
-    url.startsWith("mailto:") ||
-    url.startsWith("/") ||
-    url.startsWith("#")
+    trimmed.startsWith("http://") ||
+    trimmed.startsWith("https://") ||
+    trimmed.startsWith("mailto:") ||
+    trimmed.startsWith("/") ||
+    trimmed.startsWith("#")
   );
 }
 
