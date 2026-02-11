@@ -5,5 +5,5 @@
     "types": ["@cloudflare/workers-types/2023-07-01", "vite/client"],
     "strictNullChecks": true
   },
-  "include": ["worker", "src/shared"]
+  "include": ["worker", "shared"]
 }

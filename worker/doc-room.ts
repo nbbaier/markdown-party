@@ -2,13 +2,13 @@ import type { Connection, ConnectionContext } from "partyserver";
 import { YServer } from "y-partyserver";
 // biome-ignore lint/performance/noNamespaceImport: yjs has many exports we need
 import * as Y from "yjs";
+import { verifyJwt } from "../shared/jwt";
 import { verifyEditCookie } from "../src/shared/edit-cookie";
 import {
   type CanonicalMarkdownPayload,
   decodeMessage,
   MessageTypeCanonicalMarkdown,
 } from "../src/shared/messages";
-import { verifyJwt } from "./shared/jwt";
 
 const EDIT_CAP_REGEXP = /mp_edit_cap=([^;]+)/;
 const SESSION_COOKIE_REGEXP = /__session=([^;]+)/;
@@ -288,7 +288,7 @@ export class DocRoom extends YServer<WorkerEnv> {
       this.broadcastSyncStatus("pending-sync", "Invalid session data");
       return null;
     }
-    const { decrypt } = await import("./shared/encryption");
+    const { decrypt } = await import("../shared/encryption");
     return decrypt(parsedSession.encryptedToken, {
       currentKey: { version: 1, rawKey: this.env.ENCRYPTION_KEY_V1 },
       previousKeys: [],
@@ -926,7 +926,7 @@ export class DocRoom extends YServer<WorkerEnv> {
     const { encryptedToken } = JSON.parse(sessionData) as {
       encryptedToken: string;
     };
-    const { decrypt } = await import("./shared/encryption");
+    const { decrypt } = await import("../shared/encryption");
     const accessToken = await decrypt(encryptedToken, {
       currentKey: { version: 1, rawKey: this.env.ENCRYPTION_KEY_V1 },
       previousKeys: [],
