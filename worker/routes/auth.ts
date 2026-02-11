@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
-import { encrypt } from "../../src/shared/encryption";
-import { signJwt, verifyJwt } from "../../src/shared/jwt";
+import { encrypt } from "../../shared/encryption";
+import { signJwt, verifyJwt } from "../../shared/jwt";
 import { generateCsrfToken, setCsrfCookie } from "../shared/csrf";
 
 interface Env {

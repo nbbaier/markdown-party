@@ -1,5 +1,5 @@
 import { createMiddleware } from "hono/factory";
-import { verifyJwt } from "../../src/shared/jwt";
+import { verifyJwt } from "../../shared/jwt";
 
 interface Env {
   Bindings: {
