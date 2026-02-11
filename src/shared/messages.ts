@@ -6,7 +6,6 @@ export const MessageTypeReloadRemote = "reload-remote";
 export const MessageTypeRemoteChanged = "remote-changed";
 export const MessageTypeSyncStatus = "sync-status";
 export const MessageTypeErrorRetrying = "error-retrying";
-export const MessageTypeConflict = "conflict";
 export const MessageTypePushLocal = "push-local";
 export const MessageTypeDiscardLocal = "discard-local";
 
@@ -18,7 +17,6 @@ export type MessageType =
   | typeof MessageTypeRemoteChanged
   | typeof MessageTypeSyncStatus
   | typeof MessageTypeErrorRetrying
-  | typeof MessageTypeConflict
   | typeof MessageTypePushLocal
   | typeof MessageTypeDiscardLocal;
 

@@ -21,9 +21,11 @@ type ViewState = "loading" | "not-found" | "editor" | "viewer";
 
 function EditorView({
   docId,
+  exportRequestId,
   user,
 }: {
   docId: string;
+  exportRequestId: number;
   user: { userId: string; login: string; avatarUrl: string } | null;
 }) {
   const editorRef = useRef<EditorHandle>(null);
@@ -52,13 +54,11 @@ function EditorView({
     URL.revokeObjectURL(url);
   }, [getMarkdown, docId]);
 
-  // Listen for export event from header
   useEffect(() => {
-    window.addEventListener("export-document", handleExport);
-    return () => {
-      window.removeEventListener("export-document", handleExport);
-    };
-  }, [handleExport]);
+    if (exportRequestId > 0) {
+      handleExport();
+    }
+  }, [exportRequestId, handleExport]);
 
   const handleReloadRemote = useCallback((markdown: string) => {
     setDefaultValue(markdown);
@@ -170,7 +170,11 @@ function ReadOnlyView({ docId }: { docId: string }) {
   );
 }
 
-export function DocPage() {
+interface DocPageProps {
+  exportRequestId: number;
+}
+
+export function DocPage({ exportRequestId }: DocPageProps) {
   const { docId } = useParams<{ docId: string }>();
   const { user, loading: authLoading } = useAuth();
   const { claiming } = useEditToken(docId);
@@ -257,7 +261,11 @@ export function DocPage() {
   return (
     <div className="doc-page">
       {viewState === "editor" ? (
-        <EditorView docId={docId} user={user} />
+        <EditorView
+          docId={docId}
+          exportRequestId={exportRequestId}
+          user={user}
+        />
       ) : (
         <ReadOnlyView docId={docId} />
       )}

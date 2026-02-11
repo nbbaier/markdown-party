@@ -4,6 +4,10 @@ import { useAuth } from "../contexts/auth-context";
 import { GitHubModal } from "./github-save-modal";
 import "./header-bar.css";
 
+interface HeaderBarProps {
+  onExportDocument?: () => void;
+}
+
 interface ShareMenuProps {
   docId: string;
 }
@@ -60,7 +64,7 @@ function ShareMenu({ docId }: ShareMenuProps) {
   );
 }
 
-export function HeaderBar() {
+export function HeaderBar({ onExportDocument }: HeaderBarProps) {
   const { user, logout } = useAuth();
   const { docId } = useParams<{ docId: string }>();
   const [showShare, setShowShare] = useState(false);
@@ -68,8 +72,8 @@ export function HeaderBar() {
   const [linkedGist, setLinkedGist] = useState<string | null>(null);
 
   const handleExport = useCallback(() => {
-    window.dispatchEvent(new CustomEvent("export-document"));
-  }, []);
+    onExportDocument?.();
+  }, [onExportDocument]);
 
   const handleGitHubLinked = useCallback((gistUrl: string) => {
     setLinkedGist(gistUrl);

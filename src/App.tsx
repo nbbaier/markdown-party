@@ -73,13 +73,21 @@ function DocCreator() {
 }
 
 function AppContent() {
+  const [exportRequestId, setExportRequestId] = useState(0);
+  const requestExport = () => {
+    setExportRequestId((id) => id + 1);
+  };
+
   return (
     <div className="app">
-      <HeaderBar />
+      <HeaderBar onExportDocument={requestExport} />
       <main className="app-main">
         <Routes>
           <Route element={<DocCreator />} path="/" />
-          <Route element={<DocPage />} path="/:docId" />
+          <Route
+            element={<DocPage exportRequestId={exportRequestId} />}
+            path="/:docId"
+          />
         </Routes>
       </main>
     </div>
