@@ -1,6 +1,7 @@
 import { type Editor, useEditorState } from "@tiptap/react";
 import {
   Bold,
+  ClipboardCopy,
   Code,
   CodeSquare,
   Download,
@@ -14,11 +15,15 @@ import {
   ListTodo,
   Minus,
   Quote,
+  Redo2,
   Strikethrough,
   Table,
+  Undo2,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { LinkDialog } from "@/components/link-dialog";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Toggle } from "@/components/ui/toggle";
@@ -100,6 +105,8 @@ export function Toolbar({ editor }: ToolbarProps) {
       taskList: currentEditor.isActive("taskList"),
       blockquote: currentEditor.isActive("blockquote"),
       codeBlock: currentEditor.isActive("codeBlock"),
+      canUndo: currentEditor.can().undo(),
+      canRedo: currentEditor.can().redo(),
     }),
   });
 
@@ -109,6 +116,20 @@ export function Toolbar({ editor }: ToolbarProps) {
     setLinkDefaultUrl(previousUrl);
     setLinkDialogOpen(true);
   };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "k") {
+        e.preventDefault();
+        const attrs = editor.getAttributes("link");
+        const previousUrl = typeof attrs.href === "string" ? attrs.href : "";
+        setLinkDefaultUrl(previousUrl);
+        setLinkDialogOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [editor]);
 
   const handleLinkSubmit = (url: string) => {
     if (url === "") {
@@ -122,7 +143,29 @@ export function Toolbar({ editor }: ToolbarProps) {
   return (
     <>
       <TooltipProvider>
-        <div className="flex items-center gap-0.5 border-b bg-background px-4 py-2">
+        <div className="flex items-center gap-0.5 overflow-x-auto border-b bg-background px-4 py-2">
+          <ToolbarButton
+            onClick={() => editor.chain().focus().undo().run()}
+            tooltip="Undo (Cmd+Z)"
+          >
+            <Undo2
+              className={activeState.canUndo ? "" : "opacity-30"}
+              size={ICON_SIZE}
+            />
+          </ToolbarButton>
+
+          <ToolbarButton
+            onClick={() => editor.chain().focus().redo().run()}
+            tooltip="Redo (Cmd+Shift+Z)"
+          >
+            <Redo2
+              className={activeState.canRedo ? "" : "opacity-30"}
+              size={ICON_SIZE}
+            />
+          </ToolbarButton>
+
+          <Separator className="mx-1 h-6" orientation="vertical" />
+
           <ToolbarToggle
             onPressedChange={() => editor.chain().focus().toggleBold().run()}
             pressed={activeState.bold}
@@ -269,12 +312,25 @@ export function Toolbar({ editor }: ToolbarProps) {
             <Minus size={ICON_SIZE} />
           </ToolbarButton>
 
-          <div className="ml-auto">
+          <div className="ml-auto flex items-center">
+            <ThemeToggle />
             <ToolbarButton
               onClick={() => downloadMarkdown(editor)}
               tooltip="Download .md (Cmd+S)"
             >
               <Download size={ICON_SIZE} />
+            </ToolbarButton>
+            <ToolbarButton
+              onClick={() => {
+                const markdown = editor.getMarkdown();
+                navigator.clipboard.writeText(markdown).then(
+                  () => toast.success("Markdown copied to clipboard"),
+                  () => toast.error("Failed to copy to clipboard")
+                );
+              }}
+              tooltip="Copy Markdown"
+            >
+              <ClipboardCopy size={ICON_SIZE} />
             </ToolbarButton>
           </div>
         </div>

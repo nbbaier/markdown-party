@@ -121,18 +121,27 @@
 /* Task list styles */
 .tiptap ul[data-type="taskList"] {
   list-style: none;
-  padding-left: 0;
+  padding-left: 1.5em;
 }
 
 .tiptap ul[data-type="taskList"] li {
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   gap: 0.5em;
 }
 
 .tiptap ul[data-type="taskList"] li label {
   flex-shrink: 0;
-  margin-top: 0.25em;
+  margin-top: 0;
+  margin-left: -1.5em;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tiptap ul[data-type="taskList"] li label input[type="checkbox"] {
+  margin: 0;
+  vertical-align: text-bottom;
 }
 
 .tiptap ul[data-type="taskList"] li > div {
