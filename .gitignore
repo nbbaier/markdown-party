@@ -1,28 +1,34 @@
-# Logs
-logs
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-lerna-debug.log*
-
+# dependencies
 node_modules
+
+# build
 dist
 dist-ssr
+out
+*.tsbuildinfo
+
+# env / secrets
+.env
+.env.*
+!.env.example
+.dev.vars*
 *.local
 
-# Editor directories and files
+# test / coverage
+coverage
+*.lcov
+
+# tooling
+.wrangler
+*.tgz
+report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
+
+# editor / agent
 .vscode/*
 !.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+.claude/worktrees
+.cursor/hooks/state/continual-learning*
 
-# Cloudflare
-.wrangler
-.dev.vars*
+# logs
+*.log
+logs
