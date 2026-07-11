@@ -1,3 +1,16 @@
+---
+status: historical
+archived: 2026-07-10
+reason: Findings resolved. All 4 P1 and every P2 spot-checked were fixed in the 15 commits between the review commit (37c0834) and branch HEAD (9af5db1).
+superseded-by: docs/audits/2026-07-10-refactor-spec-v2-audit.md
+---
+
+> [!NOTE]
+> **Historical — do not read as an open task list.** This review was written at commit
+> `37c0834` (2026-02-11). Fifteen commits followed; all 4 P1 and every P2 finding
+> checked have since been fixed. Retained for provenance only. For the current state
+> of the branch see the audit: `docs/audits/2026-07-10-refactor-spec-v2-audit.md`.
+
 # Code Review: refactor/spec-v2
 
 - **PR:** #2 — "refactor: v2 doc-first architecture with ephemeral anonymous docs"
