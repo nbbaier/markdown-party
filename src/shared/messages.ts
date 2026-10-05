@@ -6,6 +6,7 @@ export const MessageTypeReloadRemote = "reload-remote";
 export const MessageTypeRemoteChanged = "remote-changed";
 export const MessageTypeSyncStatus = "sync-status";
 export const MessageTypeErrorRetrying = "error-retrying";
+export const MessageTypeLocalPersisted = "local-persisted";
 export const MessageTypePushLocal = "push-local";
 export const MessageTypeDiscardLocal = "discard-local";
 
@@ -17,6 +18,7 @@ export type MessageType =
   | typeof MessageTypeRemoteChanged
   | typeof MessageTypeSyncStatus
   | typeof MessageTypeErrorRetrying
+  | typeof MessageTypeLocalPersisted
   | typeof MessageTypePushLocal
   | typeof MessageTypeDiscardLocal;
 
@@ -62,6 +64,10 @@ export interface ErrorRetryingPayload {
   nextRetryAt: number;
 }
 
+export interface LocalPersistedPayload {
+  savedAt: number;
+}
+
 export type PushLocalPayload = Record<string, never>;
 export type DiscardLocalPayload = Record<string, never>;
 
@@ -76,6 +82,7 @@ export type CustomMessage =
   | { type: typeof MessageTypeRemoteChanged; payload: RemoteChangedPayload }
   | { type: typeof MessageTypeSyncStatus; payload: SyncStatusPayload }
   | { type: typeof MessageTypeErrorRetrying; payload: ErrorRetryingPayload }
+  | { type: typeof MessageTypeLocalPersisted; payload: LocalPersistedPayload }
   | { type: typeof MessageTypePushLocal; payload: PushLocalPayload }
   | { type: typeof MessageTypeDiscardLocal; payload: DiscardLocalPayload };
 
@@ -91,6 +98,7 @@ const ALL_MESSAGE_TYPES: string[] = [
   MessageTypeRemoteChanged,
   MessageTypeSyncStatus,
   MessageTypeErrorRetrying,
+  MessageTypeLocalPersisted,
   MessageTypePushLocal,
   MessageTypeDiscardLocal,
 ];
@@ -133,6 +141,11 @@ const PAYLOAD_VALIDATORS: {
     p !== null &&
     "attempt" in p &&
     typeof (p as { attempt: unknown }).attempt === "number",
+  [MessageTypeLocalPersisted]: (p): boolean =>
+    typeof p === "object" &&
+    p !== null &&
+    "savedAt" in p &&
+    typeof (p as { savedAt: unknown }).savedAt === "number",
   [MessageTypePushLocal]: (p): boolean => typeof p === "object" && p !== null,
   [MessageTypeDiscardLocal]: (p): boolean =>
     typeof p === "object" && p !== null,

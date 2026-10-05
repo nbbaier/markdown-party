@@ -1,8 +1,11 @@
 import type { SyncState } from "../../shared/messages";
+import type { LocalPersistenceState } from "../hooks/use-sync-status";
 
 interface SyncStatusBarProps {
   syncState: SyncState | null;
   connectionState: string;
+  localPersistenceState: LocalPersistenceState;
+  lastPersistedAt?: number;
   retryAttempt?: number;
   nextRetryAt?: number;
 }
@@ -26,6 +29,8 @@ const SYNC_CSS_CLASS: Record<SyncState, string> = {
 export function SyncStatusBar({
   syncState,
   connectionState,
+  localPersistenceState,
+  lastPersistedAt,
   retryAttempt,
   nextRetryAt,
 }: SyncStatusBarProps) {
@@ -39,14 +44,29 @@ export function SyncStatusBar({
       ? ` (attempt ${retryAttempt}, next retry ${formatRelativeTime(nextRetryAt)})`
       : "";
 
+  let persistenceLabel = "No local changes";
+  if (localPersistenceState === "saving") {
+    persistenceLabel = "Saving changes...";
+  } else if (localPersistenceState === "persisted") {
+    persistenceLabel = `Changes persisted ${formatAgo(lastPersistedAt)}`;
+  }
+
   return (
     <output
       aria-live="polite"
       className={`sync-status-bar ${cssClass}`}
-      style={{ padding: "8px 16px" }}
+      style={{
+        padding: "8px 16px",
+        display: "flex",
+        justifyContent: "space-between",
+        gap: "12px",
+      }}
     >
-      {label}
-      {retryInfo}
+      <span>
+        {label}
+        {retryInfo}
+      </span>
+      <span>{persistenceLabel}</span>
     </output>
   );
 }
@@ -62,4 +82,24 @@ function formatRelativeTime(timestamp: number): string {
   }
   const minutes = Math.ceil(seconds / 60);
   return `in ${minutes}m`;
+}
+
+function formatAgo(timestamp?: number): string {
+  if (!timestamp) {
+    return "just now";
+  }
+  const diff = Date.now() - timestamp;
+  if (diff < 1000) {
+    return "just now";
+  }
+  const seconds = Math.floor(diff / 1000);
+  if (seconds < 60) {
+    return `${seconds}s ago`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) {
+    return `${minutes}m ago`;
+  }
+  const hours = Math.floor(minutes / 60);
+  return `${hours}h ago`;
 }

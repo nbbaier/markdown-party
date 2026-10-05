@@ -12,6 +12,7 @@ import {
   decodeMessage,
   encodeMessage,
   MessageTypeCanonicalMarkdown,
+  MessageTypeLocalPersisted,
   MessageTypeRequestMarkdown,
   type SyncState,
 } from "../src/shared/messages";
@@ -20,6 +21,10 @@ import { SESSION_COOKIE_REGEX } from "./shared/session";
 
 const EDIT_CAP_REGEXP = /mp_edit_cap=([^;]+)/;
 const ANONYMOUS_TTL_MS = 24 * 60 * 60 * 1000;
+// Local snapshots save on the YServer debounce (callbackOptions); GitHub writes
+// are debounced separately so typing doesn't PATCH the Gist every second.
+const GITHUB_SYNC_DEBOUNCE_MS = 30_000;
+const GITHUB_SYNC_MAX_WAIT_MS = 60_000;
 // y-partyserver frames custom messages with this prefix (not exported by the library)
 const CUSTOM_MESSAGE_PREFIX = "__YPS:";
 
@@ -44,8 +49,8 @@ export class DocRoom extends YServer<WorkerBindings> {
   };
 
   static callbackOptions = {
-    debounceWait: 30_000,
-    debounceMaxWait: 60_000,
+    debounceWait: 500,
+    debounceMaxWait: 1000,
   };
 
   static MAX_CONNECTIONS = 50;
@@ -62,6 +67,8 @@ export class DocRoom extends YServer<WorkerBindings> {
   private readonly liveConnections = new Map<string, Connection>();
 
   private meta: DocRoomMeta | null = null;
+  private githubSyncTimer: ReturnType<typeof setTimeout> | null = null;
+  private githubSyncFirstRequestedAt: number | null = null;
   private ownerConnectionId: string | null = null;
 
   // ============================================================================
@@ -127,9 +134,14 @@ export class DocRoom extends YServer<WorkerBindings> {
   private syncBackoffAttempt = 0;
   private syncBackoffTimer: ReturnType<typeof setTimeout> | null = null;
 
+  // biome-ignore lint/suspicious/useAwait: overrides YServer's async onSave
   async onSave(): Promise<void> {
     const snapshot = Y.encodeStateAsUpdate(this.document);
     this.saveSnapshot(snapshot);
+    this.broadcastMessage({
+      type: MessageTypeLocalPersisted,
+      payload: { savedAt: Date.now() },
+    });
 
     // Update last activity
     const meta = this.getMeta();
@@ -139,7 +151,26 @@ export class DocRoom extends YServer<WorkerBindings> {
     }
 
     // Phase 2: GitHub sync
-    await this.syncToGitHub();
+    if (meta?.githubBackend) {
+      this.scheduleGitHubSync();
+    }
+  }
+
+  private scheduleGitHubSync(): void {
+    const now = Date.now();
+    this.githubSyncFirstRequestedAt ??= now;
+    const untilMaxWait =
+      this.githubSyncFirstRequestedAt + GITHUB_SYNC_MAX_WAIT_MS - now;
+    const delay = Math.max(0, Math.min(GITHUB_SYNC_DEBOUNCE_MS, untilMaxWait));
+
+    if (this.githubSyncTimer) {
+      clearTimeout(this.githubSyncTimer);
+    }
+    this.githubSyncTimer = setTimeout(() => {
+      this.githubSyncTimer = null;
+      this.githubSyncFirstRequestedAt = null;
+      this.syncToGitHub();
+    }, delay);
   }
 
   private async syncToGitHub(): Promise<void> {
@@ -450,6 +481,7 @@ export class DocRoom extends YServer<WorkerBindings> {
     console.log(
       `[DocRoom] onClose called, connection: ${connection.id}, code: ${code}, reason: ${reason}`
     );
+    const wasLastConnection = this.liveConnections.size === 1;
     this.liveConnections.delete(connection.id);
     this.connectionCapabilities.delete(connection.id);
     if (this.ownerConnectionId === connection.id) {
@@ -458,6 +490,16 @@ export class DocRoom extends YServer<WorkerBindings> {
 
     // Clean up Yjs connection state
     super.onClose(connection, code, reason, wasClean);
+
+    if (wasLastConnection) {
+      try {
+        await this.onSave();
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Unknown save failure";
+        console.error(`[DocRoom] onClose save failed: ${message}`);
+      }
+    }
 
     // Schedule TTL check when last connection leaves for anonymous docs
     const meta = this.getMeta();

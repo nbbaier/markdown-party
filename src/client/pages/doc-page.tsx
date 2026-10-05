@@ -71,6 +71,8 @@ function EditorView({
   });
   const { status, send, dismissConflict } = useSyncStatus({
     provider,
+    doc,
+    connectionState,
     getMarkdown,
   });
 
@@ -88,6 +90,8 @@ function EditorView({
     <div className="doc-editor">
       <SyncStatusBar
         connectionState={connectionState}
+        lastPersistedAt={status.lastPersistedAt}
+        localPersistenceState={status.localPersistenceState}
         nextRetryAt={status.nextRetryAt}
         retryAttempt={status.retryAttempt}
         syncState={status.syncState}
