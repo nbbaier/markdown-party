@@ -79,6 +79,10 @@ export class DocRoom extends YServer<WorkerBindings> {
     console.log(`[DocRoom] onStart called for room: ${this.name}`);
     this.ensureSchema();
     await super.onStart();
+    // Registered after super.onStart(), so loading the snapshot doesn't count
+    this.document.on("update", () => {
+      this.hasUnsavedChanges = true;
+    });
     console.log(
       `[DocRoom] onStart complete, meta initialized: ${this.meta?.initialized ?? false}`
     );
@@ -133,9 +137,17 @@ export class DocRoom extends YServer<WorkerBindings> {
 
   private syncBackoffAttempt = 0;
   private syncBackoffTimer: ReturnType<typeof setTimeout> | null = null;
+  private hasUnsavedChanges = false;
 
   // biome-ignore lint/suspicious/useAwait: overrides YServer's async onSave
   async onSave(): Promise<void> {
+    // YServer's debounced save can't be cancelled, so a call with nothing new
+    // to persist (e.g. after the last-connection save in onClose) is a no-op.
+    if (!this.hasUnsavedChanges) {
+      return;
+    }
+    this.hasUnsavedChanges = false;
+
     const snapshot = Y.encodeStateAsUpdate(this.document);
     this.saveSnapshot(snapshot);
     this.broadcastMessage({
@@ -481,8 +493,9 @@ export class DocRoom extends YServer<WorkerBindings> {
     console.log(
       `[DocRoom] onClose called, connection: ${connection.id}, code: ${code}, reason: ${reason}`
     );
-    const wasLastConnection = this.liveConnections.size === 1;
-    this.liveConnections.delete(connection.id);
+    // Rejected connections were never added, so they can't be the last one
+    const wasLive = this.liveConnections.delete(connection.id);
+    const wasLastConnection = wasLive && this.liveConnections.size === 0;
     this.connectionCapabilities.delete(connection.id);
     if (this.ownerConnectionId === connection.id) {
       this.ownerConnectionId = null;
