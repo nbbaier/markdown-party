@@ -16,7 +16,7 @@ People want to open a URL, start writing markdown together, and optionally save 
 
 ## Solution
 
-A web app at `gist.party` that is a collaborative markdown editor first, with optional GitHub persistence (Gists or repos) for signed-in users.
+A web app at `markdown.party` that is a collaborative markdown editor first, with optional GitHub persistence (Gists or repos) for signed-in users.
 
 **Core principle**: The product is the editor. GitHub is a storage backend, not a prerequisite.
 
@@ -24,22 +24,22 @@ A web app at `gist.party` that is a collaborative markdown editor first, with op
 
 ### Start Editing (No Account)
 
-1. User visits `gist.party`
+1. User visits `markdown.party`
 2. A new document is created immediately — user sees the editor and can start typing
-3. URL updates to `gist.party/<doc_id>` (short random ID, e.g. `a7xk2m`)
+3. URL updates to `markdown.party/<doc_id>` (short random ID, e.g. `a7xk2m`)
 4. User shares the URL — anyone with it can edit in real-time
 5. Document is **ephemeral**: lives for 24 hours after last activity, then deleted
 
 ### Start Editing (Signed In)
 
-1. User visits `gist.party` while signed in
+1. User visits `markdown.party` while signed in
 2. Same as above, but the document is associated with their account
 3. Document persists beyond 24 hours (no auto-expiry)
 4. User can optionally save to GitHub (Gist or repo) via "Save to GitHub" in the editor
 
 ### Open an Existing Document
 
-1. User visits `gist.party/<doc_id>`
+1. User visits `markdown.party/<doc_id>`
 2. If the document exists: editor opens with the content
 3. If it doesn't exist: 404 page
 
@@ -55,7 +55,7 @@ A web app at `gist.party` that is a collaborative markdown editor first, with op
 2. Chooses destination: **New Gist** (secret or public) or **Repository file** (future)
 3. Document is written to GitHub via the API
 4. Subsequent edits auto-sync to GitHub (debounced)
-5. The `doc_id` URL stays the same — it's gist.party's ID, not the Gist ID
+5. The `doc_id` URL stays the same — it's markdown.party's ID, not the Gist ID
 
 ### Import from GitHub
 
@@ -67,9 +67,9 @@ A web app at `gist.party` that is a collaborative markdown editor first, with op
 
 Reuses the capability-based edit token model from v1:
 
-1. Document creator gets an **edit link**: `gist.party/<doc_id>#edit=<token>`
+1. Document creator gets an **edit link**: `markdown.party/<doc_id>#edit=<token>`
 2. Anyone with the edit link can edit (token exchanged for edit capability cookie)
-3. Anyone with just `gist.party/<doc_id>` (no token) gets **read-only** access
+3. Anyone with just `markdown.party/<doc_id>` (no token) gets **read-only** access
 4. Creator can revoke edit tokens and generate new ones
 5. For anonymous docs: the creator's browser holds the edit capability via cookie — if they clear cookies, they lose edit access to their own anonymous doc
 
@@ -82,8 +82,8 @@ Reuses the capability-based edit token model from v1:
 
 ### Viewing / Raw Access
 
-- `gist.party/<doc_id>` — rendered read-only view (if no edit capability)
-- `gist.party/<doc_id>/raw` — raw markdown as `text/plain` (for curl, AI agents, scripts)
+- `markdown.party/<doc_id>` — rendered read-only view (if no edit capability)
+- `markdown.party/<doc_id>/raw` — raw markdown as `text/plain` (for curl, AI agents, scripts)
 
 ## Architecture
 
@@ -111,7 +111,7 @@ Reuses the capability-based edit token model from v1:
 
 ### DocRoom (renamed from GistRoom, extends YServer)
 
-Each document gets its own Durable Object. The DO is identified by gist.party's own `doc_id`, not a GitHub ID.
+Each document gets its own Durable Object. The DO is identified by markdown.party's own `doc_id`, not a GitHub ID.
 
 **Key changes from v1:**
 
@@ -131,7 +131,7 @@ Each document gets its own Durable Object. The DO is identified by gist.party's 
 
 **Storage (DO SQLite):**
 
-- `docId` — gist.party's document ID
+- `docId` — markdown.party's document ID
 - `yjsSnapshot` — serialized Yjs document
 - `canonicalMarkdown` — last serialized markdown string
 - `ownerId` — GitHub user ID (null for anonymous docs)
@@ -148,7 +148,7 @@ Same role as v1 but with updated routes.
 
 Same editor stack (Milkdown + Yjs + y-partyserver) but with a rethought UX:
 
-- **No landing page** — `gist.party` immediately creates a new document and redirects to `gist.party/<doc_id>`
+- **No landing page** — `markdown.party` immediately creates a new document and redirects to `markdown.party/<doc_id>`
 - **Editor toolbar** includes: share, export/download, "Save to GitHub" (if signed in), sign in prompt (if anonymous)
 - **Upload**: drag-and-drop or file picker to load a `.md` file into a new doc
 - **GitHub features** (save, import, sync status) only appear when signed in and a backend is configured
@@ -198,9 +198,9 @@ Same as v1. No changes to the underlying technology.
 2. ProseMirror transaction applied to local Yjs document via `ySyncPlugin`
 3. `YProvider` syncs update to DocRoom DO via WebSocket
 4. `YServer` broadcasts to all connected clients
-5. `onSave()` fires after debounce (30 seconds)
+5. `onSave()` fires after a 500ms debounce (max 1s) and broadcasts `local-persisted` to clients; GitHub sync is debounced separately (30 seconds, max 60s)
 6. Yjs snapshot written to DO SQLite (always)
-7. If GitHub backend configured + owner connected: request canonical markdown from client, write to GitHub with conditional `If-Match` header
+7. If GitHub backend configured + owner connected, once the 30s GitHub debounce elapses: request canonical markdown from client, write to GitHub with conditional `If-Match` header
 8. If no GitHub backend: done — document lives in DO storage only
 9. `lastActivityAt` updated (resets 24h TTL for ephemeral docs)
 
@@ -228,7 +228,7 @@ All security measures from v1 carry forward:
 
 ### In Scope
 
-- Visit `gist.party` → immediately in a new document, editing
+- Visit `markdown.party` → immediately in a new document, editing
 - Real-time collaborative editing with cursors
 - Capability-based edit tokens (share link to grant edit access)
 - Anonymous ephemeral documents (24h TTL after last activity)
@@ -263,7 +263,7 @@ All security measures from v1 carry forward:
 | Core identity       | Collaborative Gist editor                        | Collaborative markdown editor             |
 | Entry point         | Landing page with "New Document" + "Import Gist" | Instant editor — no landing page          |
 | Account required    | Yes, to do anything useful                       | No — anonymous editing works fully        |
-| Document ID         | Gist ID                                          | gist.party's own random ID                |
+| Document ID         | Gist ID                                          | markdown.party's own random ID            |
 | Document lifetime   | Tied to Gist (permanent)                         | Ephemeral (24h) or persistent (signed in) |
 | GitHub role         | The backend                                      | Optional persistence layer                |
 | Conflict resolution | Full UI with diff preview                        | Simplified (out of scope for MVP)         |
