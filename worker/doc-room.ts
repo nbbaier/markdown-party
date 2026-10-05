@@ -12,6 +12,7 @@ import {
   decodeMessage,
   encodeMessage,
   MessageTypeCanonicalMarkdown,
+  MessageTypeRequestMarkdown,
   type SyncState,
 } from "../src/shared/messages";
 import type { WorkerBindings } from "./shared/env";
@@ -19,6 +20,8 @@ import { SESSION_COOKIE_REGEX } from "./shared/session";
 
 const EDIT_CAP_REGEXP = /mp_edit_cap=([^;]+)/;
 const ANONYMOUS_TTL_MS = 24 * 60 * 60 * 1000;
+// y-partyserver frames custom messages with this prefix (not exported by the library)
+const CUSTOM_MESSAGE_PREFIX = "__YPS:";
 
 function timingSafeEqual(a: string, b: string): boolean {
   const encoder = new TextEncoder();
@@ -204,9 +207,10 @@ export class DocRoom extends YServer<WorkerBindings> {
       });
 
       // Send request to specific connection
-      connection.send(
-        JSON.stringify({
-          type: "request-markdown",
+      this.sendCustomMessage(
+        connection,
+        encodeMessage({
+          type: MessageTypeRequestMarkdown,
           payload: { requestId },
         })
       );
@@ -384,9 +388,7 @@ export class DocRoom extends YServer<WorkerBindings> {
 
   private broadcastMessage(message: CustomMessage): void {
     const msg = encodeMessage(message);
-    for (const connection of this.getConnections()) {
-      connection.send(msg);
-    }
+    this.broadcastCustomMessage(msg);
   }
 
   async onConnect(
@@ -494,7 +496,10 @@ export class DocRoom extends YServer<WorkerBindings> {
     // Handle custom string messages
     if (typeof message === "string") {
       try {
-        const customMessage = decodeMessage(message);
+        const payload = message.startsWith(CUSTOM_MESSAGE_PREFIX)
+          ? message.slice(CUSTOM_MESSAGE_PREFIX.length)
+          : message;
+        const customMessage = decodeMessage(payload);
 
         // Discriminated union narrowing for message handling
         switch (customMessage.type) {
