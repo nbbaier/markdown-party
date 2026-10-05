@@ -71,6 +71,12 @@ app.all("/parties/*", async (c) => {
   console.log(
     `[Worker] /parties/* hit: ${url.pathname}, isWebSocket: ${isUpgrade}`
   );
+  // Only WebSocket upgrades may reach DocRoom from outside. Its HTTP
+  // endpoints (/initialize, /update-token, ...) are internal and are
+  // called directly on the stub by worker/routes/docs.ts.
+  if (!isUpgrade) {
+    return c.text("Expected WebSocket upgrade", 426);
+  }
   const response = await routePartykitRequest(c.req.raw, c.env);
   if (response) {
     console.log(`[Worker] /parties/* response status: ${response.status}`);
